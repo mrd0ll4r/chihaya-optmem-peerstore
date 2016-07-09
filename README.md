@@ -1,6 +1,11 @@
 # chihaya-optmem-peerstore
 A low-memory PeerStore for the chihaya BitTorrent tracker
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/mrd0ll4r/chihaya-optmem-peerstore)](https://goreportcard.com/report/github.com/mrd0ll4r/chihaya-optmem-peerstore)
+[![GoDoc](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore?status.svg)](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![IRC Channel](https://img.shields.io/badge/freenode-%23chihaya-blue.svg "IRC Channel")](http://webchat.freenode.net/?channels=chihaya)
+
 ## What is it?
 An implementation of the `PeerStore` interface for [chihaya].
 It uses very little memory, is (subjectively) fast and handles both IPv4 and IPv6 peers in mixed swarms.
@@ -46,7 +51,7 @@ Where the parameters are:
 
 ## Limitations
 This `PeerStore` does not save PeerIDs.
-They take 20 byte per peer and are only ever returned in non-compact HTTP announces.
+They take 20 bytes per peer and are only ever returned in non-compact HTTP announces.
 
 The timestamp used for garbage collection is in seconds and stored in an unsigned 16-bit integer.
 This limits the maximum age of peers to have working garbage collection.
@@ -139,7 +144,7 @@ Testing peer store "optmem", Config: map[shard_count_bits:11]...
         1 seeders,         0 leechers:        926447680B (    904734KiB,    883.5MiB)
 ```
 
-And here are some benchmarks for a lot of peers per infohash:
+And here are some memory usages for a lot of peers for a single infohash:
 
 ```
 Testing peer store "optmem", Config: map[shard_count_bits:11]...
