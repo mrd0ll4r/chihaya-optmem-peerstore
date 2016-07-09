@@ -94,11 +94,23 @@ func (s *peerStore) collectGarbage(cutoff time.Time) {
 }
 
 func (s *peerStore) CollectGarbage(cutoff time.Time) error {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	s.collectGarbage(cutoff)
 	return nil
 }
 
 func (s *peerStore) PutSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	peer := &peer{}
 	v6 := p.IP.To16()
 	if v6 == nil {
@@ -135,6 +147,12 @@ func (s *peerStore) PutSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
 }
 
 func (s *peerStore) DeleteSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	peer := &peer{}
 	v6 := p.IP.To16()
 	if v6 == nil {
@@ -169,6 +187,12 @@ func (s *peerStore) DeleteSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) erro
 }
 
 func (s *peerStore) PutLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	peer := &peer{}
 	v6 := p.IP.To16()
 	if v6 == nil {
@@ -205,6 +229,12 @@ func (s *peerStore) PutLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error 
 }
 
 func (s *peerStore) DeleteLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	peer := &peer{}
 	v6 := p.IP.To16()
 	if v6 == nil {
@@ -244,6 +274,12 @@ func (s *peerStore) GraduateLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) e
 }
 
 func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWant int, peer4, peer6 chihaya.Peer) (peers4, peers6 []chihaya.Peer, err error) {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	peer := &peer{}
 	if peer4.IP != nil && (len(peer4.IP) == 4 || len(peer4.IP) == 16) {
 		peer.setIP(peer4.IP.To16())
@@ -279,6 +315,12 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 }
 
 func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
@@ -293,6 +335,12 @@ func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
 }
 
 func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
@@ -309,6 +357,12 @@ func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
 var v4InV6Prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
 
 func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chihaya.Peer, err error) {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
@@ -334,6 +388,12 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 }
 
 func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chihaya.Peer, err error) {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
@@ -359,6 +419,12 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 }
 
 func (s *peerStore) Stop() <-chan error {
+	select {
+	case <-s.closed:
+		return stopper.AlreadyStopped
+	default:
+	}
+	close(s.closed)
 	return stopper.AlreadyStopped
 }
 
@@ -366,12 +432,24 @@ func (s *peerStore) Stop() <-chan error {
 // This is the same as the amount of infohashes tracked.
 // Runs in constant time.
 func (s *peerStore) NumSwarms() uint64 {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	return s.shards.getTorrentCount()
 }
 
 // NumTotalSeeders returns the total number of seeders tracked by the PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
 func (s *peerStore) NumTotalSeeders() uint64 {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
@@ -390,6 +468,12 @@ func (s *peerStore) NumTotalSeeders() uint64 {
 // PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
 func (s *peerStore) NumTotalLeechers() uint64 {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
@@ -407,6 +491,12 @@ func (s *peerStore) NumTotalLeechers() uint64 {
 // NumTotalPeers returns the total number of peers tracked by the PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
 func (s *peerStore) NumTotalPeers() uint64 {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
