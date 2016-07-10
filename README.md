@@ -21,19 +21,19 @@ A typical configuration of `optmem` would look like this:
 ```yaml
 - name: optmem
 - config:
-    shard_count_bits: 11
+    shard_count_bits: 10
     gc_interval: 2m
     gc_cutoff: 22m
 ```
 
 Where the parameters are:
 
-- `shard_count_bits` specifies the number of bits-1 to use to index shards (parts of the infohash key space).  
+- `shard_count_bits` specifies the number of bits to use to index shards (parts of the infohash key space).  
     For example:
-    - `shard_count_bits: 1` will create one shard, responsible for all possible infohashes
-    - `shard_count_bits: 2` will create two shards, each responsible for half of all possible infohashes
-    - `shard_count_bits: 3` will create four shards, each responsible for a quarter of all possible infohashes
-    - `shard_count_bits: 11` will create 1024 shards, each responsible for 1/1024th of all possible infohashes
+    - `shard_count_bits: 1` will create two shards, each responsible for half of all possible infohashes
+    - `shard_count_bits: 2` will create four shards, each responsible for a quarter of all possible infohashes
+    - `shard_count_bits: 10` will create 1024 shards, each responsible for 1/1024th of all possible infohashes
+    - `shard_count_bits: 0` will be interpreted as `shard_count_bits: 10`
     
     Creating a shard takes a small amount of memory, even without actually storing any infohashes.
     Having many shards therefore increases the base memory usage of the peer store, but does not affect the amount of memory a single infohash takes.

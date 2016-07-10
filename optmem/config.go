@@ -13,12 +13,12 @@ var ErrMissingConfig = errors.New("missing config")
 
 type peerStoreConfig struct {
 
-	// ShardCountBits specifies the number of bits -1 to use for shard
+	// ShardCountBits specifies the number of bits to use for shard
 	// indexing.
 	// For example:
-	// ShardCountBits = 1, shards = 1
-	// ShardCountBits = 2, shards = 2
-	// ShardCountBits = 3, shards = 4
+	// ShardCountBits = 1, shards = 2
+	// ShardCountBits = 2, shards = 4
+	// ShardCountBits = 3, shards = 8
 	// ShardCountBits = 10, shards = 512
 	//
 	// Every shard contains an equal part of all possible infohashes.
