@@ -66,6 +66,7 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 type peerStore struct {
 	shards *shardContainer
 	closed chan struct{}
+	cfg    *peerStoreConfig
 }
 
 func (s *peerStore) collectGarbage(cutoff time.Time) {
@@ -424,8 +425,13 @@ func (s *peerStore) Stop() <-chan error {
 		return stopper.AlreadyStopped
 	default:
 	}
-	close(s.closed)
-	return stopper.AlreadyStopped
+	toReturn := make(chan error)
+	go func() {
+		s.shards = newShardContainer(s.cfg.ShardCountBits)
+		close(s.closed)
+		close(toReturn)
+	}()
+	return toReturn
 }
 
 // NumSwarms returns the total number of swarms tracked by the PeerStore.
