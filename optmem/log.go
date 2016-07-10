@@ -6,7 +6,7 @@ import (
 )
 
 func logf(format string, v ...interface{}) {
-	log.Printf("optmem: "+format, v)
+	log.Println("optmem: " + fmt.Sprintf(format, v...))
 }
 
 func logln(v ...interface{}) {
