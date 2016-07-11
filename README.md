@@ -2,7 +2,7 @@
 A low-memory PeerStore for the chihaya BitTorrent tracker
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/mrd0ll4r/chihaya-optmem-peerstore)](https://goreportcard.com/report/github.com/mrd0ll4r/chihaya-optmem-peerstore)
-[![GoDoc](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore?status.svg)](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore)
+[![GoDoc](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem?status.svg)](https://godoc.org/github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![IRC Channel](https://img.shields.io/badge/freenode-%23chihaya-blue.svg "IRC Channel")](http://webchat.freenode.net/?channels=chihaya)
 
@@ -12,8 +12,23 @@ It uses very little memory, is (subjectively) fast and handles both IPv4 and IPv
 
 It registers itself as `optmem` with the chihaya `store`.
 
-
 [chihaya]: https://github.com/chihaya/chihaya
+
+## How do I use it?
+You should first `go get` the relevant package:
+
+```
+go get github.com/mrd0ll4r/chihaya-optmem-perstore/optmem
+```
+
+Next you need to import it in your chihaya binary, like so:
+
+```go
+import _ github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
+```
+
+Now you can use it by configuring the `store` to use `optmem` as the PeerStore driver.
+
 
 ## Configuration
 A typical configuration of `optmem` would look like this:
