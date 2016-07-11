@@ -40,6 +40,7 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 	ps := &peerStore{
 		shards: newShardContainer(cfg.ShardCountBits),
 		closed: make(chan struct{}),
+		cfg:    cfg,
 	}
 
 	go func() {
