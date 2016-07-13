@@ -35,11 +35,24 @@ Now you can use it by configuring the `store` to use `optmem` as the PeerStore d
 A typical configuration of `optmem` would look like this:
 
 ```yaml
-- name: optmem
-- config:
-    shard_count_bits: 10
-    gc_interval: 2m
-    gc_cutoff: 22m
+chihaya:
+  tracker:
+    announce: 10m
+    min_announce: 5m
+#   ... more tracker config ... 
+
+  servers:
+    - name: store
+      config:
+#        ... more store config ...
+        peer_store:
+          name: optmem
+          config:
+            shard_count_bits: 10
+            gc_interval: 2m
+            gc_cutoff: 12m
+
+# ... more configuration ...
 ```
 
 Where the parameters are:
