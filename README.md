@@ -19,7 +19,7 @@ It registers itself as `optmem` with the chihaya `store`.
 You should first `go get` the relevant package:
 
 ```
-go get github.com/mrd0ll4r/chihaya-optmem-perstore/optmem
+go get github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
 ```
 
 Next you need to import it in your chihaya binary, like so:
