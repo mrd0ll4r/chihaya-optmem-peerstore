@@ -27,16 +27,6 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 		return nil, err
 	}
 
-	gcInterval, err := time.ParseDuration(cfg.GCInterval)
-	if err != nil {
-		return nil, err
-	}
-
-	gcCutoff, err := time.ParseDuration(cfg.GCCutoff)
-	if err != nil {
-		return nil, err
-	}
-
 	ps := &peerStore{
 		shards: newShardContainer(cfg.ShardCountBits),
 		closed: make(chan struct{}),
@@ -48,8 +38,8 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 			select {
 			case <-ps.closed:
 				return
-			case <-time.After(gcInterval):
-				cutoffTime := time.Now().Add(gcCutoff * -1)
+			case <-time.After(cfg.GCInterval):
+				cutoffTime := time.Now().Add(cfg.GCCutoff * -1)
 				logln("collecting garbage. Cutoff time: " + cutoffTime.String())
 				err := ps.CollectGarbage(cutoffTime)
 				if err != nil {

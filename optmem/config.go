@@ -2,14 +2,25 @@ package optmem
 
 import (
 	"errors"
+	"time"
 
 	"gopkg.in/yaml.v2"
 
 	"github.com/chihaya/chihaya/server/store"
 )
 
-// ErrMissingConfig is returned if a non-existent config is opened.
-var ErrMissingConfig = errors.New("missing config")
+var (
+	// ErrInvalidGCCutoff is returned for a config with an invalid
+	// gc_cutoff.
+	ErrInvalidGCCutoff = errors.New("invalid gc_cutoff")
+
+	// ErrInvalidGCInterval is returned for a config with an invalid
+	// gc_interval.
+	ErrInvalidGCInterval = errors.New("invalid gc_interval")
+
+	// ErrMissingConfig is returned if a non-existent config is opened.
+	ErrMissingConfig = errors.New("missing config")
+)
 
 type peerStoreConfig struct {
 
@@ -31,11 +42,11 @@ type peerStoreConfig struct {
 	ShardCountBits uint `yaml:"shard_count_bits"`
 
 	// GCInterval is the interval at which garbace collection will run.
-	GCInterval string `yaml:"gc_interval"`
+	GCInterval time.Duration `yaml:"gc_interval"`
 
 	// GCCutoff is the maximum duration a peer is allowed to go without
 	// announcing before being marked for garbage collection.
-	GCCutoff string `yaml:"gc_cutoff"`
+	GCCutoff time.Duration `yaml:"gc_cutoff"`
 }
 
 func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) {
@@ -58,12 +69,12 @@ func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) 
 		cfg.ShardCountBits = 11
 	}
 
-	if cfg.GCInterval == "" {
-		cfg.GCInterval = "5m"
+	if cfg.GCInterval == 0 {
+		return nil, ErrInvalidGCInterval
 	}
 
-	if cfg.GCCutoff == "" {
-		cfg.GCCutoff = "10m"
+	if cfg.GCCutoff == 0 {
+		return nil, ErrInvalidGCCutoff
 	}
 	return &cfg, nil
 }

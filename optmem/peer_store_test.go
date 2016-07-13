@@ -3,13 +3,15 @@ package optmem
 import (
 	"testing"
 
+	"time"
+
 	"github.com/chihaya/chihaya/server/store"
 )
 
 var (
 	peerStoreTester      = store.PreparePeerStoreTester(&peerStoreDriver{})
 	peerStoreBenchmarker = store.PreparePeerStoreBenchmarker(&peerStoreDriver{})
-	peerStoreTestConfig  = &store.DriverConfig{Config: &peerStoreConfig{ShardCountBits: 10}}
+	peerStoreTestConfig  = &store.DriverConfig{Config: &peerStoreConfig{ShardCountBits: 10, GCInterval: time.Duration(1000000000), GCCutoff: time.Duration(1000000000)}}
 )
 
 func init() {
