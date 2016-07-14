@@ -267,7 +267,7 @@ func (pl *peerList) getRandomLeechers(numWant int) []peer {
 	return toReturn
 }
 
-func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer) []peer {
+func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer) (peers []peer) {
 	if seeder {
 		// seeder announces: only leechers
 		if numWant > pl.numPeers-pl.numSeeders {
@@ -292,20 +292,28 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 	}
 	// we have exactly as many peers as they want
 	if numWant == pl.numPeers {
-		return pl.getAllPeers()
+		tmp := pl.getAllPeers()
+		peers = make([]peer, 0, len(tmp))
+		for _, p := range tmp {
+			// filter out the announcing peer
+			if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {
+				peers = append(peers, p)
+			}
+		}
+		return
 	}
 
 	// we don't have enough seeders to only return seeders
-	toReturn := make([]peer, 0, numWant)
-	toReturn = append(toReturn, pl.getAllSeeders()...)
-	leechers := pl.getRandomLeechers(numWant - len(toReturn))
+	peers = make([]peer, 0, numWant)
+	peers = append(peers, pl.getAllSeeders()...)
+	leechers := pl.getRandomLeechers(numWant - len(peers))
 	for _, p := range leechers {
 		// filter out the announcing peer
 		if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {
-			toReturn = append(toReturn, p)
+			peers = append(peers, p)
 		}
 	}
-	return toReturn
+	return
 }
 
 func (pl *peerList) bucketIndex(peer *peer) int {
