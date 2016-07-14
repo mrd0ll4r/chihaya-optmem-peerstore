@@ -304,7 +304,7 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
-			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 		} else {
 			peers6 = append(peers6, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
 		}
@@ -384,7 +384,7 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
-			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 		} else {
 			peers6 = append(peers6, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
 		}
@@ -422,7 +422,7 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
-			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+			peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 		} else {
 			peers6 = append(peers6, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
 		}

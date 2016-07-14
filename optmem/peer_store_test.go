@@ -49,6 +49,7 @@ func TestPutNumGetSeeder(t *testing.T) {
 	require.NotNil(t, seeders4)
 
 	require.Equal(t, 1, len(seeders4))
+	require.Equal(t, 4, len(seeders4[0].IP))
 	require.Equal(t, p1.Port, seeders4[0].Port)
 	require.True(t, p1.IP.Equal(seeders4[0].IP))
 
@@ -81,6 +82,7 @@ func TestPutNumGetLeecher(t *testing.T) {
 	require.NotNil(t, leechers4)
 
 	require.Equal(t, 1, len(leechers4))
+	require.Equal(t, 4, len(leechers4[0].IP))
 	require.Equal(t, p1.Port, leechers4[0].Port)
 	require.True(t, p1.IP.Equal(leechers4[0].IP))
 
@@ -121,6 +123,7 @@ func TestDeleteSeeder(t *testing.T) {
 	require.NotNil(t, seeders4)
 
 	require.Equal(t, 1, len(seeders4))
+	require.Equal(t, 4, len(seeders4[0].IP))
 	require.Equal(t, p1.Port, seeders4[0].Port)
 	require.True(t, p1.IP.Equal(seeders4[0].IP))
 
@@ -182,6 +185,7 @@ func TestDeleteLeecher(t *testing.T) {
 	require.NotNil(t, leechers4)
 
 	require.Equal(t, 1, len(leechers4))
+	require.Equal(t, 4, len(leechers4[0].IP))
 	require.Equal(t, p1.Port, leechers4[0].Port)
 	require.True(t, p1.IP.Equal(leechers4[0].IP))
 
