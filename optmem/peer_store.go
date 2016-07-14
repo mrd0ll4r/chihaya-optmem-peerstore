@@ -285,7 +285,12 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
-	defer s.shards.unlockShardByHash(ih, 0)
+	unlocked := false
+	defer func() {
+		if !unlocked {
+			s.shards.unlockShardByHash(ih, 0)
+		}
+	}()
 
 	var pl swarm
 	var ok bool
@@ -294,6 +299,8 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 	}
 
 	peers := pl.peers.getAnnouncePeers(numWant, seeder, peer)
+	s.shards.unlockShardByHash(ih, 0)
+	unlocked = true
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
@@ -358,7 +365,12 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
-	defer s.shards.unlockShardByHash(ih, 0)
+	unlocked := false
+	defer func() {
+		if !unlocked {
+			s.shards.unlockShardByHash(ih, 0)
+		}
+	}()
 
 	var pl swarm
 	var ok bool
@@ -367,6 +379,8 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 	}
 
 	peers := pl.peers.getAllSeeders()
+	s.shards.unlockShardByHash(ih, 0)
+	unlocked = true
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
@@ -389,7 +403,12 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 	ih := infohash(infoHash)
 
 	shard := s.shards.lockShardByHash(ih)
-	defer s.shards.unlockShardByHash(ih, 0)
+	unlocked := false
+	defer func() {
+		if !unlocked {
+			s.shards.unlockShardByHash(ih, 0)
+		}
+	}()
 
 	var pl swarm
 	var ok bool
@@ -398,6 +417,8 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 	}
 
 	peers := pl.peers.getAllLeechers()
+	s.shards.unlockShardByHash(ih, 0)
+	unlocked = true
 
 	for _, p := range peers {
 		if bytes.Equal(p.data[:12], v4InV6Prefix) {
