@@ -61,20 +61,15 @@ func (pl *peerList) collectGarbage(cutoffTime, maxDiff uint16) (gc bool) {
 // Rebalancing will create new buckets and redistribute all peers to them.
 // Rebalancing aims to have less than 512 peers per bucket.
 // Returns whether rebalancing was performed.
-func (pl *peerList) rebalanceBuckets() (rebalanced bool) {
+func (pl *peerList) rebalanceBuckets() bool {
 	targetBuckets := 2
-	switch {
-	case pl.numPeers <= 512:
-		targetBuckets = 2
-		break
-	case pl.numPeers <= 1024:
-		targetBuckets = 4
-		break
-	default:
-		t := pl.numPeers >> 9
-		for ; t != 0; t = t >> 1 {
-			targetBuckets = targetBuckets * 2
-		}
+	t := 0
+
+	if pl.numPeers > 0 {
+		t = (pl.numPeers - 1) >> 9
+	}
+	for ; t != 0; t = t >> 1 {
+		targetBuckets = targetBuckets * 2
 	}
 
 	if len(pl.peerBuckets) == targetBuckets {
@@ -95,7 +90,7 @@ func (pl *peerList) rebalanceBuckets() (rebalanced bool) {
 	}
 
 	if targetBuckets >= 1024 {
-		logf("had to do a huge bucket rebalance to %d buckets (took %s)\n", targetBuckets, time.Since(before).String())
+		logf("had to do a huge bucket rebalance to %d buckets (have %d peers) (took %s)\n", targetBuckets, pl.numPeers, time.Since(before).String())
 	}
 	return true
 }
