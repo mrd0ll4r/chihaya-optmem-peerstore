@@ -108,97 +108,97 @@ Thanks to erdgeist for that great piece of software!
 Here are some memory usages for many infohashes:
 
 ```
-Testing peer store "optmem", Config: map[shard_count_bits:11]...
+Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m gc_cutoff:5m]...
 1 infohashes...
-        1 seeders,         0 leechers:           148736B (       145KiB)
+        1 seeders,         0 leechers:            74624B (        72KiB)
 
 2 infohashes...
-        1 seeders,         0 leechers:           149136B (       145KiB)
+        1 seeders,         0 leechers:            75104B (        73KiB)
 
 5 infohashes...
-        1 seeders,         0 leechers:           150208B (       146KiB)
+        1 seeders,         0 leechers:            76416B (        74KiB)
 
 10 infohashes...
-        1 seeders,         0 leechers:           152048B (       148KiB)
+        1 seeders,         0 leechers:            78336B (        76KiB)
 
 20 infohashes...
-        1 seeders,         0 leechers:           155728B (       152KiB)
+        1 seeders,         0 leechers:            82816B (        80KiB)
 
 50 infohashes...
-        1 seeders,         0 leechers:           164432B (       160KiB)
+        1 seeders,         0 leechers:            92480B (        90KiB)
 
 100 infohashes...
-        1 seeders,         0 leechers:           178448B (       174KiB)
+        1 seeders,         0 leechers:           104896B (       102KiB)
 
 200 infohashes...
-        1 seeders,         0 leechers:           200016B (       195KiB)
+        1 seeders,         0 leechers:           123456B (       120KiB)
 
 500 infohashes...
-        1 seeders,         0 leechers:           250528B (       244KiB)
+        1 seeders,         0 leechers:           177216B (       173KiB)
 
 1000 infohashes...
-        1 seeders,         0 leechers:           329424B (       321KiB)
+        1 seeders,         0 leechers:           208656B (       203KiB)
 
 2000 infohashes...
-        1 seeders,         0 leechers:           515008B (       502KiB)
+        1 seeders,         0 leechers:           418576B (       408KiB)
 
 5000 infohashes...
-        1 seeders,         0 leechers:          1093040B (      1067KiB,      1.0MiB)
+        1 seeders,         0 leechers:          1122368B (      1096KiB,      1.1MiB)
 
 10000 infohashes...
-        1 seeders,         0 leechers:          2084128B (      2035KiB,      2.0MiB)
+        1 seeders,         0 leechers:          2110480B (      2061KiB,      2.0MiB)
 
 20000 infohashes...
-        1 seeders,         0 leechers:          4010384B (      3916KiB,      3.8MiB)
+        1 seeders,         0 leechers:          4156368B (      4058KiB,      4.0MiB)
 
 50000 infohashes...
-        1 seeders,         0 leechers:          9297856B (      9079KiB,      8.9MiB)
+        1 seeders,         0 leechers:          9873552B (      9642KiB,      9.4MiB)
 
 100000 infohashes...
-        1 seeders,         0 leechers:         18414816B (     17983KiB,     17.6MiB)
+        1 seeders,         0 leechers:         19763360B (     19300KiB,     18.8MiB)
 
 200000 infohashes...
-        1 seeders,         0 leechers:         36629936B (     35771KiB,     34.9MiB)
+        1 seeders,         0 leechers:         38858432B (     37947KiB,     37.1MiB)
 
 500000 infohashes...
-        1 seeders,         0 leechers:        110865616B (    108267KiB,    105.7MiB)
+        1 seeders,         0 leechers:        127171472B (    124190KiB,    121.3MiB)
 
 1000000 infohashes...
-        1 seeders,         0 leechers:        226571968B (    221261KiB,    216.1MiB)
+        1 seeders,         0 leechers:        257554432B (    251518KiB,    245.6MiB)
 
 2000000 infohashes...
-        1 seeders,         0 leechers:        462031712B (    451202KiB,    440.6MiB)
+        1 seeders,         0 leechers:        522502752B (    510256KiB,    498.3MiB)
 
 5000000 infohashes...
-        1 seeders,         0 leechers:        926447680B (    904734KiB,    883.5MiB)
+        1 seeders,         0 leechers:       1003673984B (    980150KiB,    957.2MiB)
 ```
 
 And here are some memory usages for a lot of peers for a single infohash:
 
 ```
-Testing peer store "optmem", Config: map[shard_count_bits:11]...
+Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m gc_cutoff:5m]...
 1 infohashes...
-        1 seeders,         1 leechers:           148768B (       145KiB)
-        5 seeders,         5 leechers:           148976B (       145KiB)
-       10 seeders,        10 leechers:           149408B (       145KiB)
-       25 seeders,        25 leechers:           150176B (       146KiB)
-       50 seeders,        50 leechers:           151520B (       147KiB)
-      100 seeders,       100 leechers:           154464B (       150KiB)
-      250 seeders,       250 leechers:           160992B (       157KiB)
-      500 seeders,       500 leechers:           173424B (       169KiB)
-     1000 seeders,      1000 leechers:           198000B (       193KiB)
-     2500 seeders,      2500 leechers:           342704B (       334KiB)
-     5000 seeders,      5000 leechers:           543440B (       530KiB)
-    10000 seeders,     10000 leechers:           925040B (       903KiB)
-    25000 seeders,     25000 leechers:          1727824B (      1687KiB,      1.6MiB)
-    50000 seeders,     50000 leechers:          3306992B (      3229KiB,      3.2MiB)
-   100000 seeders,    100000 leechers:          6469792B (      6318KiB,      6.2MiB)
-   250000 seeders,    250000 leechers:         12811632B (     12511KiB,     12.2MiB)
-   500000 seeders,    500000 leechers:         25443600B (     24847KiB,     24.3MiB)
-  1000000 seeders,   1000000 leechers:         50713776B (     49525KiB,     48.4MiB)
-  2500000 seeders,   2500000 leechers:        194790320B (    190224KiB,    185.8MiB)
-  5000000 seeders,   5000000 leechers:        389109424B (    379989KiB,    371.1MiB)
- 10000000 seeders,  10000000 leechers:        778049712B (    759814KiB,    742.0MiB)
+        1 seeders,         1 leechers:              480B
+        5 seeders,         5 leechers:              880B
+       10 seeders,        10 leechers:             1312B (         1KiB)
+       25 seeders,        25 leechers:             2080B (         2KiB)
+       50 seeders,        50 leechers:             3552B (         3KiB)
+      100 seeders,       100 leechers:            80224B (        78KiB)
+      250 seeders,       250 leechers:            13024B (        12KiB)
+      500 seeders,       500 leechers:            99216B (        96KiB)
+     1000 seeders,      1000 leechers:            50032B (        48KiB)
+     2500 seeders,      2500 leechers:           194736B (       190KiB)
+     5000 seeders,      5000 leechers:           392112B (       382KiB)
+    10000 seeders,     10000 leechers:           777968B (       759KiB)
+    25000 seeders,     25000 leechers:          1579856B (      1542KiB,      1.5MiB)
+    50000 seeders,     50000 leechers:          3158832B (      3084KiB,      3.0MiB)
+   100000 seeders,    100000 leechers:          6321440B (      6173KiB,      6.0MiB)
+   250000 seeders,    250000 leechers:         12737488B (     12438KiB,     12.1MiB)
+   500000 seeders,    500000 leechers:         25369392B (     24774KiB,     24.2MiB)
+  1000000 seeders,   1000000 leechers:         50567536B (     49382KiB,     48.2MiB)
+  2500000 seeders,   2500000 leechers:        194716208B (    190152KiB,    185.7MiB)
+  5000000 seeders,   5000000 leechers:        389035056B (    379917KiB,    371.0MiB)
+ 10000000 seeders,  10000000 leechers:        777975760B (    759741KiB,    741.9MiB)
 ```
 
 Note that there are no differences between IPv4 and IPv6 peers regarding memory usage.
