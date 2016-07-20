@@ -3,6 +3,11 @@ package optmem
 import (
 	"encoding/binary"
 	"fmt"
+
+	"bytes"
+	"net"
+
+	"github.com/chihaya/chihaya"
 )
 
 type infohash [20]byte
@@ -63,6 +68,15 @@ func (p *peer) isLeecher() bool {
 	return p.peerFlag()&peerFlagLeecher != 0
 }
 
+func makePeer(p chihaya.Peer, flag peerFlag, peerTime uint16) *peer {
+	toReturn := &peer{}
+	toReturn.setIP(p.IP.To16())
+	toReturn.setPort(p.Port)
+	toReturn.setPeerFlag(flag)
+	toReturn.setPeerTime(peerTime)
+	return toReturn
+}
+
 type peerFlag byte
 
 const (
@@ -71,9 +85,32 @@ const (
 )
 
 type swarm struct {
-	peers *peerList
+	peers4 *peerList
+	peers6 *peerList
 }
 
 type shard struct {
 	swarms map[infohash]swarm
+}
+
+type peerType int
+
+const (
+	v4Peer peerType = iota
+	v6Peer
+	invalidPeer
+)
+
+func determinePeerType(p chihaya.Peer) peerType {
+	switch {
+	case len(p.IP) == net.IPv4len:
+		return v4Peer
+	case len(p.IP) == net.IPv6len:
+		if bytes.Equal(v4InV6Prefix, p.IP[:12]) {
+			return v4Peer
+		}
+		return v6Peer
+	default:
+		return invalidPeer
+	}
 }
