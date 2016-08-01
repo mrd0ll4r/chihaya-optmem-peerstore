@@ -40,12 +40,8 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 			case <-time.After(cfg.GCInterval):
 				cutoffTime := time.Now().Add(cfg.GCCutoff * -1)
 				logln("collecting garbage. Cutoff time: " + cutoffTime.String())
-				err := ps.CollectGarbage(cutoffTime)
-				if err != nil {
-					logln("failed to collect garbage: " + err.Error())
-				} else {
-					logln("finished collecting garbage")
-				}
+				ps.collectGarbage(cutoffTime)
+				logln("finished collecting garbage")
 			}
 		}
 	}()
@@ -62,7 +58,7 @@ type peerStore struct {
 func (s *peerStore) collectGarbage(cutoff time.Time) {
 	internalCutoff := uint16(cutoff.Unix())
 	maxDiff := uint16(time.Now().Unix() - cutoff.Unix())
-	logf("running GC. internal cutoff: %d, maxDiff: %d\n", internalCutoff, maxDiff)
+	logf("running GC. internal cutoff: %d, maxDiff: %d, infohashes: %d, peers: %d\n", internalCutoff, maxDiff, s.NumSwarms(), s.NumTotalPeers())
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		deltaTorrents := 0
@@ -100,6 +96,8 @@ func (s *peerStore) collectGarbage(cutoff time.Time) {
 		s.shards.unlockShard(i, deltaTorrents)
 		runtime.Gosched()
 	}
+
+	logf("GC done. infohashes: %d, peers: %d\n", s.NumSwarms(), s.NumTotalPeers())
 }
 
 func (s *peerStore) CollectGarbage(cutoff time.Time) error {
@@ -290,7 +288,6 @@ func (s *peerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 	}
 
 	if (pl.peers4 == nil && pl.peers6 == nil) || (pl.peers6 == nil && pl.peers4.numPeers == 0) || (pl.peers4 == nil && pl.peers6.numPeers == 0) {
-
 		delete(shard.swarms, ih)
 		deleted = true
 	}
@@ -344,12 +341,12 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 }
 
 func (s *peerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p *peer, pType peerType) (peers []chihaya.Peer, err error) {
-	shard := s.shards.lockShardByHash(ih)
+	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
-		s.shards.unlockShardByHash(ih, 0)
+		s.shards.rUnlockShardByHash(ih)
 		return nil, store.ErrResourceDoesNotExist
 	}
 
@@ -359,7 +356,7 @@ func (s *peerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 	} else {
 		ps = pl.peers6.getAnnouncePeers(numWant, seeder, p)
 	}
-	s.shards.unlockShardByHash(ih, 0)
+	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps {
 		if pType == v4Peer {
@@ -381,12 +378,12 @@ func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
 
 	ih := infohash(infoHash)
 
-	shard := s.shards.lockShardByHash(ih)
-	defer s.shards.unlockShardByHash(ih, 0)
+	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
+		s.shards.rUnlockShardByHash(ih)
 		return 0
 	}
 
@@ -398,6 +395,7 @@ func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
 		totalSeeders += pl.peers6.numSeeders
 	}
 
+	s.shards.rUnlockShardByHash(ih)
 	return totalSeeders
 }
 
@@ -410,12 +408,12 @@ func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
 
 	ih := infohash(infoHash)
 
-	shard := s.shards.lockShardByHash(ih)
-	defer s.shards.unlockShardByHash(ih, 0)
+	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
+		s.shards.rUnlockShardByHash(ih)
 		return 0
 	}
 	totalLeechers := 0
@@ -426,6 +424,7 @@ func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
 		totalLeechers += (pl.peers6.numPeers - pl.peers6.numSeeders)
 	}
 
+	s.shards.rUnlockShardByHash(ih)
 	return totalLeechers
 }
 
@@ -440,17 +439,12 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 
 	ih := infohash(infoHash)
 
-	shard := s.shards.lockShardByHash(ih)
-	unlocked := false
-	defer func() {
-		if !unlocked {
-			s.shards.unlockShardByHash(ih, 0)
-		}
-	}()
+	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
+		s.shards.rUnlockShardByHash(ih)
 		return nil, nil, store.ErrResourceDoesNotExist
 	}
 
@@ -462,8 +456,7 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 	if pl.peers6 != nil {
 		ps6 = pl.peers6.getAllSeeders()
 	}
-	s.shards.unlockShardByHash(ih, 0)
-	unlocked = true
+	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
 		peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
@@ -485,17 +478,12 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 
 	ih := infohash(infoHash)
 
-	shard := s.shards.lockShardByHash(ih)
-	unlocked := false
-	defer func() {
-		if !unlocked {
-			s.shards.unlockShardByHash(ih, 0)
-		}
-	}()
+	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
+		s.shards.rUnlockShardByHash(ih)
 		return nil, nil, store.ErrResourceDoesNotExist
 	}
 
@@ -507,8 +495,7 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 	if pl.peers6 != nil {
 		ps6 = pl.peers6.getAllLeechers()
 	}
-	s.shards.unlockShardByHash(ih, 0)
-	unlocked = true
+	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
 		peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
@@ -561,7 +548,7 @@ func (s *peerStore) NumTotalSeeders() uint64 {
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
-		shard := s.shards.lockShard(i)
+		shard := s.shards.rLockShard(i)
 		for _, s := range shard.swarms {
 			if s.peers4 != nil {
 				n += uint64(s.peers4.numSeeders)
@@ -570,7 +557,7 @@ func (s *peerStore) NumTotalSeeders() uint64 {
 				n += uint64(s.peers6.numSeeders)
 			}
 		}
-		s.shards.unlockShard(i, 0)
+		s.shards.rUnlockShard(i)
 		runtime.Gosched()
 	}
 
@@ -590,7 +577,7 @@ func (s *peerStore) NumTotalLeechers() uint64 {
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
-		shard := s.shards.lockShard(i)
+		shard := s.shards.rLockShard(i)
 		for _, s := range shard.swarms {
 			if s.peers4 != nil {
 				n += uint64(s.peers4.numPeers - s.peers4.numSeeders)
@@ -599,7 +586,7 @@ func (s *peerStore) NumTotalLeechers() uint64 {
 				n += uint64(s.peers4.numPeers - s.peers6.numSeeders)
 			}
 		}
-		s.shards.unlockShard(i, 0)
+		s.shards.rUnlockShard(i)
 		runtime.Gosched()
 	}
 
@@ -618,7 +605,7 @@ func (s *peerStore) NumTotalPeers() uint64 {
 	n := uint64(0)
 
 	for i := 0; i < len(s.shards.shards); i++ {
-		shard := s.shards.lockShard(i)
+		shard := s.shards.rLockShard(i)
 		for _, s := range shard.swarms {
 			if s.peers4 != nil {
 				n += uint64(s.peers4.numPeers)
@@ -627,7 +614,7 @@ func (s *peerStore) NumTotalPeers() uint64 {
 				n += uint64(s.peers6.numPeers)
 			}
 		}
-		s.shards.unlockShard(i, 0)
+		s.shards.rUnlockShard(i)
 		runtime.Gosched()
 	}
 
