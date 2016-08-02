@@ -202,9 +202,7 @@ func (pl *peerList) getAllLeechers() []peer {
 	return leechers
 }
 
-var r = rand.New(rand.NewSource(time.Now().UnixNano()))
-
-func (pl *peerList) getRandomSeeders(numWant int) []peer {
+func (pl *peerList) getRandomSeeders(numWant int, r *rand.Rand) []peer {
 	buckets := pl.peerBuckets
 	toReturn := make([]peer, numWant)
 	chosen := 0
@@ -233,7 +231,7 @@ func (pl *peerList) getRandomSeeders(numWant int) []peer {
 	return toReturn
 }
 
-func (pl *peerList) getRandomLeechers(numWant int) []peer {
+func (pl *peerList) getRandomLeechers(numWant int, r *rand.Rand) []peer {
 	buckets := pl.peerBuckets
 	toReturn := make([]peer, numWant)
 	chosen := 0
@@ -262,7 +260,7 @@ func (pl *peerList) getRandomLeechers(numWant int) []peer {
 	return toReturn
 }
 
-func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer) (peers []peer) {
+func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer, r *rand.Rand) (peers []peer) {
 	if seeder {
 		// seeder announces: only leechers
 		if numWant > pl.numPeers-pl.numSeeders {
@@ -271,7 +269,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 		if numWant == pl.numPeers-pl.numSeeders {
 			return pl.getAllLeechers()
 		}
-		return pl.getRandomLeechers(numWant)
+		return pl.getRandomLeechers(numWant, r)
 	}
 
 	// leecher announces: seeders as many as possible, then leechers
@@ -283,7 +281,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 
 	// we have enough seeders to only return seeders
 	if numWant <= pl.numSeeders {
-		return pl.getRandomSeeders(numWant)
+		return pl.getRandomSeeders(numWant, r)
 	}
 	// we have exactly as many peers as they want
 	if numWant == pl.numPeers {
@@ -301,7 +299,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 	// we don't have enough seeders to only return seeders
 	peers = make([]peer, 0, numWant)
 	peers = append(peers, pl.getAllSeeders()...)
-	leechers := pl.getRandomLeechers(numWant - len(peers))
+	leechers := pl.getRandomLeechers(numWant-len(peers), r)
 	for _, p := range leechers {
 		// filter out the announcing peer
 		if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {

@@ -2,6 +2,7 @@ package optmem
 
 import (
 	"encoding/binary"
+	"math/rand"
 	"sync"
 	"sync/atomic"
 )
@@ -13,7 +14,7 @@ type shardContainer struct {
 	shardLocks      []*sync.RWMutex // mutexes for the shards
 }
 
-func newShardContainer(shardCountBits uint) *shardContainer {
+func newShardContainer(shardCountBits uint, parallelRands uint) *shardContainer {
 	shardCount := 1 << shardCountBits      // this is the amount of shards of the infohash keyspace we have
 	shardCountShift := 32 - shardCountBits // we need this to quickly find the shard for an infohash
 	numTorrents := uint64(0)
@@ -27,6 +28,7 @@ func newShardContainer(shardCountBits uint) *shardContainer {
 	for i := 0; i < shardCount; i++ {
 		toReturn.shards[i] = &shard{
 			swarms: make(map[infohash]swarm),
+			r:      newRandContainer(func() *rand.Rand { return rand.New(rand.NewSource(rand.Int63())) }, parallelRands),
 		}
 		toReturn.shardLocks[i] = &sync.RWMutex{}
 	}

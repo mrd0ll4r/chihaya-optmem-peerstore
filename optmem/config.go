@@ -41,6 +41,12 @@ type peerStoreConfig struct {
 	// are doing.
 	ShardCountBits uint `yaml:"shard_count_bits"`
 
+	// RandomParallelism specifies how many random sources to make available
+	// to use concurrently per shard.
+	//
+	// A higher value decreases lock contention but consumes memory.
+	RandomParallelism uint `yaml:"random_parallelism"`
+
 	// GCInterval is the interval at which garbace collection will run.
 	GCInterval time.Duration `yaml:"gc_interval"`
 
@@ -67,6 +73,10 @@ func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) 
 
 	if cfg.ShardCountBits < 1 {
 		cfg.ShardCountBits = 10
+	}
+
+	if cfg.RandomParallelism < 1 {
+		cfg.RandomParallelism = 8
 	}
 
 	if cfg.GCInterval == 0 {

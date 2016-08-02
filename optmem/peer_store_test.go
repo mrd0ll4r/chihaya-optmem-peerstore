@@ -15,7 +15,7 @@ import (
 var (
 	peerStoreTester      = store.PreparePeerStoreTester(&peerStoreDriver{})
 	peerStoreBenchmarker = store.PreparePeerStoreBenchmarker(&peerStoreDriver{})
-	peerStoreTestConfig  = &store.DriverConfig{Config: &peerStoreConfig{ShardCountBits: 10, GCInterval: time.Duration(10000000000), GCCutoff: time.Duration(10000000000)}}
+	peerStoreTestConfig  = &store.DriverConfig{Config: &peerStoreConfig{ShardCountBits: 10, RandomParallelism: 8, GCInterval: time.Duration(10000000000), GCCutoff: time.Duration(10000000000)}}
 )
 
 var (

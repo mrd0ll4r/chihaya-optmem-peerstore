@@ -27,7 +27,7 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 	}
 
 	ps := &peerStore{
-		shards: newShardContainer(cfg.ShardCountBits),
+		shards: newShardContainer(cfg.ShardCountBits, cfg.RandomParallelism),
 		closed: make(chan struct{}),
 		cfg:    cfg,
 	}
@@ -351,11 +351,13 @@ func (s *peerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 	}
 
 	var ps []peer
+	r := shard.r.Get()
 	if pType == v4Peer {
-		ps = pl.peers4.getAnnouncePeers(numWant, seeder, p)
+		ps = pl.peers4.getAnnouncePeers(numWant, seeder, p, r)
 	} else {
-		ps = pl.peers6.getAnnouncePeers(numWant, seeder, p)
+		ps = pl.peers6.getAnnouncePeers(numWant, seeder, p, r)
 	}
+	shard.r.Put(r)
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps {
@@ -516,7 +518,7 @@ func (s *peerStore) Stop() <-chan error {
 	}
 	toReturn := make(chan error)
 	go func() {
-		s.shards = newShardContainer(s.cfg.ShardCountBits)
+		s.shards = newShardContainer(s.cfg.ShardCountBits, s.cfg.RandomParallelism)
 		close(s.closed)
 		close(toReturn)
 	}()

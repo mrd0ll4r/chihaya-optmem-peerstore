@@ -91,6 +91,7 @@ type swarm struct {
 
 type shard struct {
 	swarms map[infohash]swarm
+	r      *randContainer // a few *rand.Rands to use by multiple goroutines concurrently
 }
 
 type peerType int
