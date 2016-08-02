@@ -30,7 +30,7 @@ type peerStoreConfig struct {
 	// ShardCountBits = 1, shards = 2
 	// ShardCountBits = 2, shards = 4
 	// ShardCountBits = 3, shards = 8
-	// ShardCountBits = 10, shards = 512
+	// ShardCountBits = 10, shards = 1024
 	//
 	// Every shard contains an equal part of all possible infohashes.
 	// Increasing the number of shards will increase the base memory
@@ -66,7 +66,7 @@ func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) 
 	}
 
 	if cfg.ShardCountBits < 1 {
-		cfg.ShardCountBits = 11
+		cfg.ShardCountBits = 10
 	}
 
 	if cfg.GCInterval == 0 {
