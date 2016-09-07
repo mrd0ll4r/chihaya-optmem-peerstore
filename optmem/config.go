@@ -3,10 +3,6 @@ package optmem
 import (
 	"errors"
 	"time"
-
-	"gopkg.in/yaml.v2"
-
-	"github.com/chihaya/chihaya/server/store"
 )
 
 var (
@@ -17,13 +13,10 @@ var (
 	// ErrInvalidGCInterval is returned for a config with an invalid
 	// gc_interval.
 	ErrInvalidGCInterval = errors.New("invalid gc_interval")
-
-	// ErrMissingConfig is returned if a non-existent config is opened.
-	ErrMissingConfig = errors.New("missing config")
 )
 
-type peerStoreConfig struct {
-
+// Config holds the configuration for an optmen PeerStore.
+type Config struct {
 	// ShardCountBits specifies the number of bits to use for shard
 	// indexing.
 	// For example:
@@ -47,7 +40,7 @@ type peerStoreConfig struct {
 	// A higher value decreases lock contention but consumes memory.
 	RandomParallelism uint `yaml:"random_parallelism"`
 
-	// GCInterval is the interval at which garbace collection will run.
+	// GCInterval is the interval at which garbage collection will run.
 	GCInterval time.Duration `yaml:"gc_interval"`
 
 	// GCCutoff is the maximum duration a peer is allowed to go without
@@ -55,22 +48,7 @@ type peerStoreConfig struct {
 	GCCutoff time.Duration `yaml:"gc_cutoff"`
 }
 
-func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) {
-	if storecfg == nil || storecfg.Config == nil {
-		return nil, ErrMissingConfig
-	}
-
-	bytes, err := yaml.Marshal(storecfg.Config)
-	if err != nil {
-		return nil, err
-	}
-
-	var cfg peerStoreConfig
-	err = yaml.Unmarshal(bytes, &cfg)
-	if err != nil {
-		return nil, err
-	}
-
+func validateConfig(cfg Config) (Config, error) {
 	if cfg.ShardCountBits < 1 {
 		cfg.ShardCountBits = 10
 	}
@@ -80,11 +58,12 @@ func newPeerStoreConfig(storecfg *store.DriverConfig) (*peerStoreConfig, error) 
 	}
 
 	if cfg.GCInterval == 0 {
-		return nil, ErrInvalidGCInterval
+		return cfg, ErrInvalidGCInterval
 	}
 
 	if cfg.GCCutoff == 0 {
-		return nil, ErrInvalidGCCutoff
+		return cfg, ErrInvalidGCCutoff
 	}
-	return &cfg, nil
+
+	return cfg, nil
 }

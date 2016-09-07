@@ -1,32 +1,29 @@
 package optmem
 
 import (
-	"errors"
 	"net"
 	"runtime"
 	"time"
 
-	"github.com/chihaya/chihaya"
-	"github.com/chihaya/chihaya/pkg/stopper"
-	"github.com/chihaya/chihaya/server/store"
+	"github.com/chihaya/chihaya/bittorrent"
+	"github.com/chihaya/chihaya/stopper"
+	"github.com/chihaya/chihaya/storage"
+	"github.com/pkg/errors"
 )
-
-func init() {
-	store.RegisterPeerStoreDriver("optmem", &peerStoreDriver{})
-}
 
 // ErrInvalidIP is returned if a peer with an invalid IP was specified.
 var ErrInvalidIP = errors.New("invalid IP")
 
-type peerStoreDriver struct{}
+var _ storage.PeerStore = &PeerStore{}
 
-func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, error) {
-	cfg, err := newPeerStoreConfig(storecfg)
+// New creates a new PeerStore from the config.
+func New(cfg Config) (*PeerStore, error) {
+	cfg, err := validateConfig(cfg)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "invalid config")
 	}
 
-	ps := &peerStore{
+	ps := &PeerStore{
 		shards: newShardContainer(cfg.ShardCountBits, cfg.RandomParallelism),
 		closed: make(chan struct{}),
 		cfg:    cfg,
@@ -49,13 +46,14 @@ func (p *peerStoreDriver) New(storecfg *store.DriverConfig) (store.PeerStore, er
 	return ps, nil
 }
 
-type peerStore struct {
+// PeerStore is an instance of an optmem PeerStore.
+type PeerStore struct {
 	shards *shardContainer
 	closed chan struct{}
-	cfg    *peerStoreConfig
+	cfg    Config
 }
 
-func (s *peerStore) collectGarbage(cutoff time.Time) {
+func (s *PeerStore) collectGarbage(cutoff time.Time) {
 	internalCutoff := uint16(cutoff.Unix())
 	maxDiff := uint16(time.Now().Unix() - cutoff.Unix())
 	logf("running GC. internal cutoff: %d, maxDiff: %d, infohashes: %d, peers: %d\n", internalCutoff, maxDiff, s.NumSwarms(), s.NumTotalPeers())
@@ -100,7 +98,9 @@ func (s *peerStore) collectGarbage(cutoff time.Time) {
 	logf("GC done. infohashes: %d, peers: %d\n", s.NumSwarms(), s.NumTotalPeers())
 }
 
-func (s *peerStore) CollectGarbage(cutoff time.Time) error {
+// CollectGarbage can be used to manually collect peers older than the given
+// cutoff.
+func (s *PeerStore) CollectGarbage(cutoff time.Time) error {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -111,7 +111,8 @@ func (s *peerStore) CollectGarbage(cutoff time.Time) error {
 	return nil
 }
 
-func (s *peerStore) PutSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+// PutSeeder implements the PutSeeder method of a storage.PeerStore.
+func (s *PeerStore) PutSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer) error {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -131,7 +132,8 @@ func (s *peerStore) PutSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
 	return nil
 }
 
-func (s *peerStore) DeleteSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+// DeleteSeeder implements the DeleteSeeder method of a storage.PeerStore.
+func (s *PeerStore) DeleteSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer) error {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -151,7 +153,8 @@ func (s *peerStore) DeleteSeeder(infoHash chihaya.InfoHash, p chihaya.Peer) erro
 	return nil
 }
 
-func (s *peerStore) PutLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+// PutLeecher implements the PutLeecher method of a storage.PeerStore.
+func (s *PeerStore) PutLeecher(infoHash bittorrent.InfoHash, p bittorrent.Peer) error {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -171,7 +174,8 @@ func (s *peerStore) PutLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error 
 	return nil
 }
 
-func (s *peerStore) DeleteLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+// DeleteLeecher implements the DeleteLeecher method of a storage.PeerStore.
+func (s *PeerStore) DeleteLeecher(infoHash bittorrent.InfoHash, p bittorrent.Peer) error {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -191,12 +195,13 @@ func (s *peerStore) DeleteLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) err
 	return nil
 }
 
-func (s *peerStore) GraduateLeecher(infoHash chihaya.InfoHash, p chihaya.Peer) error {
+// GraduateLeecher implements the GraduateLeecher method of a storage.PeerStore.
+func (s *PeerStore) GraduateLeecher(infoHash bittorrent.InfoHash, p bittorrent.Peer) error {
 	// we can just overwrite any leecher we already have, so
 	return s.PutSeeder(infoHash, p)
 }
 
-func (s *peerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bool) {
+func (s *PeerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bool) {
 	shard := s.shards.lockShardByHash(ih)
 
 	var pl swarm
@@ -237,7 +242,7 @@ func (s *peerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bo
 	return
 }
 
-func (s *peerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted bool, err error) {
+func (s *PeerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted bool, err error) {
 	shard := s.shards.lockShardByHash(ih)
 	defer func() {
 		if deleted {
@@ -250,17 +255,17 @@ func (s *peerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
-		return false, store.ErrResourceDoesNotExist
+		return false, storage.ErrResourceDoesNotExist
 	}
 
 	if pType == v4Peer {
 		if pl.peers4 == nil {
-			return false, store.ErrResourceDoesNotExist
+			return false, storage.ErrResourceDoesNotExist
 		}
 
 		found := pl.peers4.removePeer(peer)
 		if !found {
-			return false, store.ErrResourceDoesNotExist
+			return false, storage.ErrResourceDoesNotExist
 		}
 
 		if pl.peers4.numPeers == 0 {
@@ -271,12 +276,12 @@ func (s *peerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 		}
 	} else {
 		if pl.peers6 == nil {
-			return false, store.ErrResourceDoesNotExist
+			return false, storage.ErrResourceDoesNotExist
 		}
 
 		found := pl.peers6.removePeer(peer)
 		if !found {
-			return false, store.ErrResourceDoesNotExist
+			return false, storage.ErrResourceDoesNotExist
 		}
 
 		if pl.peers6.numPeers == 0 {
@@ -295,7 +300,8 @@ func (s *peerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 	return
 }
 
-func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWant int, peer4, peer6 chihaya.Peer) (peers4, peers6 []chihaya.Peer, err error) {
+// AnnouncePeers implements the AnnouncePeers method of a storage.PeerStore.
+func (s *PeerStore) AnnouncePeers(infoHash bittorrent.InfoHash, seeder bool, numWant int, announcingPeer bittorrent.Peer) ([]bittorrent.Peer, error) {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -304,50 +310,32 @@ func (s *peerStore) AnnouncePeers(infoHash chihaya.InfoHash, seeder bool, numWan
 
 	ih := infohash(infoHash)
 
-	var p4, p6 *peer
-	if peer4.IP != nil && (len(peer4.IP) == 4 || len(peer4.IP) == 16) {
-		p4 = &peer{}
-		p4.setIP(peer4.IP.To16())
-		p4.setPort(peer4.Port)
-	}
-	if peer6.IP != nil && len(peer6.IP) == 16 {
-		p6 = &peer{}
-		p6.setIP(peer6.IP)
-		p6.setPort(peer6.Port)
+	if len(announcingPeer.IP) != net.IPv4len && len(announcingPeer.IP) != net.IPv6len {
+		return nil, ErrInvalidIP
 	}
 
-	if p4 == nil && p6 == nil {
-		return nil, nil, ErrInvalidIP
+	p := &peer{}
+	p.setPort(announcingPeer.Port)
+	switch {
+	case announcingPeer.IP.To4() != nil:
+		p.setIP(announcingPeer.IP.To16())
+		return s.announceSingleStack(ih, seeder, numWant, p, v4Peer)
+	case announcingPeer.IP.To16() != nil:
+		p.setIP(announcingPeer.IP.To16())
+		return s.announceSingleStack(ih, seeder, numWant, p, v6Peer)
+	default:
+		panic("peer was neither v4 nor v6 even after we checked")
 	}
-
-	if p4 != nil {
-		peers4, err = s.announceSingleStack(ih, seeder, numWant, p4, v4Peer)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	if p6 != nil {
-		peers6, err = s.announceSingleStack(ih, seeder, numWant, p6, v6Peer)
-		if err != nil {
-			if peers4 != nil && len(peers4) != 0 {
-				return peers4, nil, nil
-			}
-			return nil, nil, err
-		}
-	}
-
-	return
 }
 
-func (s *peerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p *peer, pType peerType) (peers []chihaya.Peer, err error) {
+func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p *peer, pType peerType) (peers []bittorrent.Peer, err error) {
 	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
 		s.shards.rUnlockShardByHash(ih)
-		return nil, store.ErrResourceDoesNotExist
+		return nil, storage.ErrResourceDoesNotExist
 	}
 
 	var ps []peer
@@ -362,16 +350,17 @@ func (s *peerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 
 	for _, p := range ps {
 		if pType == v4Peer {
-			peers = append(peers, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+			peers = append(peers, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 			continue
 		}
-		peers = append(peers, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers = append(peers, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
 	}
 
 	return
 }
 
-func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
+// NumSeeders returns the number of seeders for the given infohash.
+func (s *PeerStore) NumSeeders(infoHash bittorrent.InfoHash) int {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -401,7 +390,8 @@ func (s *peerStore) NumSeeders(infoHash chihaya.InfoHash) int {
 	return totalSeeders
 }
 
-func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
+// NumLeechers returns the number of leechers for the given infohash.
+func (s *PeerStore) NumLeechers(infoHash bittorrent.InfoHash) int {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -432,7 +422,8 @@ func (s *peerStore) NumLeechers(infoHash chihaya.InfoHash) int {
 
 var v4InV6Prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
 
-func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chihaya.Peer, err error) {
+// GetSeeders returns all seeders for the given infohash.
+func (s *PeerStore) GetSeeders(infoHash bittorrent.InfoHash) (peers4, peers6 []bittorrent.Peer, err error) {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -447,7 +438,7 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
 		s.shards.rUnlockShardByHash(ih)
-		return nil, nil, store.ErrResourceDoesNotExist
+		return nil, nil, storage.ErrResourceDoesNotExist
 	}
 
 	var ps4, ps6 []peer
@@ -461,17 +452,18 @@ func (s *peerStore) GetSeeders(infoHash chihaya.InfoHash) (peers4, peers6 []chih
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 	}
 
 	for _, p := range ps6 {
-		peers6 = append(peers6, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers6 = append(peers6, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
 	}
 
 	return
 }
 
-func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chihaya.Peer, err error) {
+// GetLeechers returns all leechers for the given infohash.
+func (s *PeerStore) GetLeechers(infoHash bittorrent.InfoHash) (peers4, peers6 []bittorrent.Peer, err error) {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -486,7 +478,7 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
 		s.shards.rUnlockShardByHash(ih)
-		return nil, nil, store.ErrResourceDoesNotExist
+		return nil, nil, storage.ErrResourceDoesNotExist
 	}
 
 	var ps4, ps6 []peer
@@ -500,17 +492,18 @@ func (s *peerStore) GetLeechers(infoHash chihaya.InfoHash) (peers4, peers6 []chi
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, chihaya.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
 	}
 
 	for _, p := range ps6 {
-		peers6 = append(peers6, chihaya.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers6 = append(peers6, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
 	}
 
 	return
 }
 
-func (s *peerStore) Stop() <-chan error {
+// Stop implements the Stop method of a storage.PeerStore.
+func (s *PeerStore) Stop() <-chan error {
 	select {
 	case <-s.closed:
 		return stopper.AlreadyStopped
@@ -528,7 +521,7 @@ func (s *peerStore) Stop() <-chan error {
 // NumSwarms returns the total number of swarms tracked by the PeerStore.
 // This is the same as the amount of infohashes tracked.
 // Runs in constant time.
-func (s *peerStore) NumSwarms() uint64 {
+func (s *PeerStore) NumSwarms() uint64 {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -540,7 +533,7 @@ func (s *peerStore) NumSwarms() uint64 {
 
 // NumTotalSeeders returns the total number of seeders tracked by the PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
-func (s *peerStore) NumTotalSeeders() uint64 {
+func (s *PeerStore) NumTotalSeeders() uint64 {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -569,7 +562,7 @@ func (s *peerStore) NumTotalSeeders() uint64 {
 // NumTotalLeechers returns the total number of leechers tracked by the
 // PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
-func (s *peerStore) NumTotalLeechers() uint64 {
+func (s *PeerStore) NumTotalLeechers() uint64 {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -597,7 +590,8 @@ func (s *peerStore) NumTotalLeechers() uint64 {
 
 // NumTotalPeers returns the total number of peers tracked by the PeerStore.
 // Runs in linear time in regards to the number of swarms tracked.
-func (s *peerStore) NumTotalPeers() uint64 {
+// Call this instead of calling NumTotalLeechers + NumTotalSeeders.
+func (s *PeerStore) NumTotalPeers() uint64 {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")

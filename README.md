@@ -9,9 +9,7 @@ A low-memory PeerStore for the chihaya BitTorrent tracker
 
 ## What is it?
 An implementation of the `PeerStore` interface for [chihaya].
-It uses very little memory, is (subjectively) fast and handles both IPv4 and IPv6 peers in mixed swarms.
-
-It registers itself as `optmem` with the chihaya `store`.
+It uses very little memory, is (subjectively) fast and handles both IPv4 and IPv6 peers in separate swarms.
 
 [chihaya]: https://github.com/chihaya/chihaya
 
@@ -25,10 +23,10 @@ go get github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
 Next you need to import it in your chihaya binary, like so:
 
 ```go
-import _ github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
+import "github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem"
 ```
 
-Now you can use it by configuring the `store` to use `optmem` as the PeerStore driver.
+Now modify your config to hold a config for `optmem` and parse it, then create the storage for the tracker backend from it.
 
 
 ## Configuration
@@ -36,22 +34,15 @@ A typical configuration of `optmem` would look like this:
 
 ```yaml
 chihaya:
-  tracker:
-    announce: 10m
-    min_announce: 5m
+  announce_interval: 15m
+  prometheus_addr: localhost:6880
 #   ... more tracker config ... 
 
-  servers:
-    - name: store
-      config:
-#        ... more store config ...
-        peer_store:
-          name: optmem
-          config:
-            shard_count_bits: 10
-            random_parallelism: 8
-            gc_interval: 2m
-            gc_cutoff: 12m
+  storage:
+    shard_count_bits: 10
+    random_parallelism: 8
+    gc_interval: 2m
+    gc_cutoff: 12m
 
 # ... more configuration ...
 ```

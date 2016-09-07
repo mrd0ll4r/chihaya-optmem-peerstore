@@ -1,13 +1,12 @@
 package optmem
 
 import (
+	"bytes"
 	"encoding/binary"
 	"fmt"
-
-	"bytes"
 	"net"
 
-	"github.com/chihaya/chihaya"
+	"github.com/chihaya/chihaya/bittorrent"
 )
 
 type infohash [20]byte
@@ -68,7 +67,7 @@ func (p *peer) isLeecher() bool {
 	return p.peerFlag()&peerFlagLeecher != 0
 }
 
-func makePeer(p chihaya.Peer, flag peerFlag, peerTime uint16) *peer {
+func makePeer(p bittorrent.Peer, flag peerFlag, peerTime uint16) *peer {
 	toReturn := &peer{}
 	toReturn.setIP(p.IP.To16())
 	toReturn.setPort(p.Port)
@@ -102,7 +101,7 @@ const (
 	invalidPeer
 )
 
-func determinePeerType(p chihaya.Peer) peerType {
+func determinePeerType(p bittorrent.Peer) peerType {
 	switch {
 	case len(p.IP) == net.IPv4len:
 		return v4Peer
