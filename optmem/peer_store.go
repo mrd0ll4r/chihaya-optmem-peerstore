@@ -359,6 +359,43 @@ func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 	return
 }
 
+// ScrapeSwarm implements the ScrapeSwarm method of a storage.PeerStore.
+func (s *PeerStore) ScrapeSwarm(infoHash bittorrent.InfoHash, v6 bool) (scrape bittorrent.Scrape) {
+	select {
+	case <-s.closed:
+		panic("attempted to interact with closed store")
+	default:
+	}
+
+	ih := infohash(infoHash)
+
+	shard := s.shards.rLockShardByHash(ih)
+
+	var pl swarm
+	var ok bool
+	if pl, ok = shard.swarms[ih]; !ok {
+		s.shards.rUnlockShardByHash(ih)
+		return
+	}
+
+	if v6 {
+		if pl.peers6 != nil {
+			scrape.Complete = uint32(pl.peers6.numSeeders)
+			scrape.Incomplete = uint32(pl.peers6.numPeers - pl.peers6.numSeeders)
+		}
+		s.shards.rUnlockShardByHash(ih)
+		return
+	}
+
+	// v4
+	if pl.peers4 != nil {
+		scrape.Complete = uint32(pl.peers4.numSeeders)
+		scrape.Incomplete = uint32(pl.peers4.numPeers - pl.peers4.numSeeders)
+	}
+	s.shards.rUnlockShardByHash(ih)
+	return
+}
+
 // NumSeeders returns the number of seeders for the given infohash.
 func (s *PeerStore) NumSeeders(infoHash bittorrent.InfoHash) int {
 	select {
