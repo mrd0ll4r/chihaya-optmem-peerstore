@@ -202,5 +202,161 @@ Testing peer store "optmem", Config: map[gc_interval:5m gc_cutoff:5m random_para
 
 Note that there are no differences between IPv4 and IPv6 peers regarding memory usage.
 
+Here's a benchmark comparison between the chihaya `memory` implementation (old) and this implementation (new):
+
+```
+benchmark                                 old ns/op     new ns/op     delta
+BenchmarkPut                              369           297           -19.51%
+BenchmarkPut-8                            545           485           -11.01%
+BenchmarkPut1k                            369           651           +76.42%
+BenchmarkPut1k-8                          597           790           +32.33%
+BenchmarkPut1kInfohash                    397           419           +5.54%
+BenchmarkPut1kInfohash-8                  109           83.3          -23.58%
+BenchmarkPut1kInfohash1k                  402           404           +0.50%
+BenchmarkPut1kInfohash1k-8                111           84.0          -24.32%
+BenchmarkPutDelete                        1224          1308          +6.86%
+BenchmarkPutDelete-8                      3126          1680          -46.26%
+BenchmarkPutDelete1k                      1225          1430          +16.73%
+BenchmarkPutDelete1k-8                    3147          1683          -46.52%
+BenchmarkPutDelete1kInfohash              1315          1422          +8.14%
+BenchmarkPutDelete1kInfohash-8            3213          1645          -48.80%
+BenchmarkPutDelete1kInfohash1k            1281          1436          +12.10%
+BenchmarkPutDelete1kInfohash1k-8          3075          1592          -48.23%
+BenchmarkDeleteNonexist                   211           400           +89.57%
+BenchmarkDeleteNonexist-8                 255           566           +121.96%
+BenchmarkDeleteNonexist1k                 210           351           +67.14%
+BenchmarkDeleteNonexist1k-8               254           590           +132.28%
+BenchmarkDeleteNonexist1kInfohash         221           374           +69.23%
+BenchmarkDeleteNonexist1kInfohash-8       63.7          91.6          +43.80%
+BenchmarkDeleteNonexist1kInfohash1k       223           366           +64.13%
+BenchmarkDeleteNonexist1kInfohash1k-8     63.8          92.2          +44.51%
+BenchmarkPutGradDelete                    1832          1723          -5.95%
+BenchmarkPutGradDelete-8                  4443          2018          -54.58%
+BenchmarkPutGradDelete1k                  1864          1764          -5.36%
+BenchmarkPutGradDelete1k-8                5013          1946          -61.18%
+BenchmarkPutGradDelete1kInfohash          1957          1639          -16.25%
+BenchmarkPutGradDelete1kInfohash-8        4677          2022          -56.77%
+BenchmarkPutGradDelete1kInfohash1k        1936          1883          -2.74%
+BenchmarkPutGradDelete1kInfohash1k-8      4713          1895          -59.79%
+BenchmarkGradNonexist                     377           371           -1.59%
+BenchmarkGradNonexist-8                   614           495           -19.38%
+BenchmarkGradNonexist1k                   403           541           +34.24%
+BenchmarkGradNonexist1k-8                 683           804           +17.72%
+BenchmarkGradNonexist1kInfohash           437           395           -9.61%
+BenchmarkGradNonexist1kInfohash-8         117           85.5          -26.92%
+BenchmarkGradNonexist1kInfohash1k         433           389           -10.16%
+BenchmarkGradNonexist1kInfohash1k-8       121           85.6          -29.26%
+BenchmarkAnnounceLeecher                  17126         11274         -34.17%
+BenchmarkAnnounceLeecher-8                4099          3168          -22.71%
+BenchmarkAnnounceLeecher1kInfohash        21358         16074         -24.74%
+BenchmarkAnnounceLeecher1kInfohash-8      4986          4220          -15.36%
+BenchmarkAnnounceSeeder                   17283         11775         -31.87%
+BenchmarkAnnounceSeeder-8                 4116          3281          -20.29%
+BenchmarkAnnounceSeeder1kInfohash         21358         16181         -24.24%
+BenchmarkAnnounceSeeder1kInfohash-8       4972          4229          -14.94%
+
+benchmark                                 old allocs     new allocs     delta
+BenchmarkPut                              2              1              -50.00%
+BenchmarkPut-8                            2              1              -50.00%
+BenchmarkPut1k                            2              1              -50.00%
+BenchmarkPut1k-8                          2              1              -50.00%
+BenchmarkPut1kInfohash                    2              1              -50.00%
+BenchmarkPut1kInfohash-8                  2              1              -50.00%
+BenchmarkPut1kInfohash1k                  2              1              -50.00%
+BenchmarkPut1kInfohash1k-8                2              1              -50.00%
+BenchmarkPutDelete                        6              7              +16.67%
+BenchmarkPutDelete-8                      6              7              +16.67%
+BenchmarkPutDelete1k                      6              7              +16.67%
+BenchmarkPutDelete1k-8                    6              7              +16.67%
+BenchmarkPutDelete1kInfohash              6              7              +16.67%
+BenchmarkPutDelete1kInfohash-8            6              7              +16.67%
+BenchmarkPutDelete1kInfohash1k            6              7              +16.67%
+BenchmarkPutDelete1kInfohash1k-8          6              7              +16.67%
+BenchmarkDeleteNonexist                   2              2              +0.00%
+BenchmarkDeleteNonexist-8                 2              2              +0.00%
+BenchmarkDeleteNonexist1k                 2              2              +0.00%
+BenchmarkDeleteNonexist1k-8               2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash         2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash-8       2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash1k       2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash1k-8     2              2              +0.00%
+BenchmarkPutGradDelete                    9              8              -11.11%
+BenchmarkPutGradDelete-8                  9              8              -11.11%
+BenchmarkPutGradDelete1k                  9              8              -11.11%
+BenchmarkPutGradDelete1k-8                9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash          9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash-8        9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash1k        9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash1k-8      9              8              -11.11%
+BenchmarkGradNonexist                     2              1              -50.00%
+BenchmarkGradNonexist-8                   2              1              -50.00%
+BenchmarkGradNonexist1k                   2              1              -50.00%
+BenchmarkGradNonexist1k-8                 2              1              -50.00%
+BenchmarkGradNonexist1kInfohash           2              1              -50.00%
+BenchmarkGradNonexist1kInfohash-8         2              1              -50.00%
+BenchmarkGradNonexist1kInfohash1k         2              1              -50.00%
+BenchmarkGradNonexist1kInfohash1k-8       2              1              -50.00%
+BenchmarkAnnounceLeecher                  58             58             +0.00%
+BenchmarkAnnounceLeecher-8                58             58             +0.00%
+BenchmarkAnnounceLeecher1kInfohash        58             58             +0.00%
+BenchmarkAnnounceLeecher1kInfohash-8      58             58             +0.00%
+BenchmarkAnnounceSeeder                   58             58             +0.00%
+BenchmarkAnnounceSeeder-8                 58             58             +0.00%
+BenchmarkAnnounceSeeder1kInfohash         58             58             +0.00%
+BenchmarkAnnounceSeeder1kInfohash-8       58             58             +0.00%
+
+benchmark                                 old bytes     new bytes     delta
+BenchmarkPut                              64            32            -50.00%
+BenchmarkPut-8                            64            32            -50.00%
+BenchmarkPut1k                            64            32            -50.00%
+BenchmarkPut1k-8                          64            32            -50.00%
+BenchmarkPut1kInfohash                    64            32            -50.00%
+BenchmarkPut1kInfohash-8                  64            32            -50.00%
+BenchmarkPut1kInfohash1k                  64            32            -50.00%
+BenchmarkPut1kInfohash1k-8                64            32            -50.00%
+BenchmarkPutDelete                        400           256           -36.00%
+BenchmarkPutDelete-8                      400           256           -36.00%
+BenchmarkPutDelete1k                      400           256           -36.00%
+BenchmarkPutDelete1k-8                    400           256           -36.00%
+BenchmarkPutDelete1kInfohash              400           256           -36.00%
+BenchmarkPutDelete1kInfohash-8            400           256           -36.00%
+BenchmarkPutDelete1kInfohash1k            400           256           -36.00%
+BenchmarkPutDelete1kInfohash1k-8          400           256           -36.00%
+BenchmarkDeleteNonexist                   48            48            +0.00%
+BenchmarkDeleteNonexist-8                 48            48            +0.00%
+BenchmarkDeleteNonexist1k                 48            48            +0.00%
+BenchmarkDeleteNonexist1k-8               48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash         48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash-8       48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash1k       48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash1k-8     48            48            +0.00%
+BenchmarkPutGradDelete                    672           288           -57.14%
+BenchmarkPutGradDelete-8                  672           288           -57.14%
+BenchmarkPutGradDelete1k                  672           288           -57.14%
+BenchmarkPutGradDelete1k-8                672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash          672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash-8        672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash1k        672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash1k-8      672           288           -57.14%
+BenchmarkGradNonexist                     64            32            -50.00%
+BenchmarkGradNonexist-8                   64            32            -50.00%
+BenchmarkGradNonexist1k                   64            32            -50.00%
+BenchmarkGradNonexist1k-8                 64            32            -50.00%
+BenchmarkGradNonexist1kInfohash           64            32            -50.00%
+BenchmarkGradNonexist1kInfohash-8         64            32            -50.00%
+BenchmarkGradNonexist1kInfohash1k         64            32            -50.00%
+BenchmarkGradNonexist1kInfohash1k-8       64            32            -50.00%
+BenchmarkAnnounceLeecher                  8296          9840          +18.61%
+BenchmarkAnnounceLeecher-8                8296          9840          +18.61%
+BenchmarkAnnounceLeecher1kInfohash        8296          9840          +18.61%
+BenchmarkAnnounceLeecher1kInfohash-8      8296          9840          +18.61%
+BenchmarkAnnounceSeeder                   8296          9840          +18.61%
+BenchmarkAnnounceSeeder-8                 8296          9840          +18.61%
+BenchmarkAnnounceSeeder1kInfohash         8296          9840          +18.61%
+BenchmarkAnnounceSeeder1kInfohash-8       8296          9840          +18.61%
+```
+
+Note that these are _just benchmarks_, not real-world metrics.
+
 ## License
 MIT, see the LICENSE file
