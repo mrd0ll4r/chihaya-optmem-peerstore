@@ -148,9 +148,9 @@ func (s *PeerStore) DeleteSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer
 	peer := makePeer(p, peerFlagSeeder, uint16(0))
 	ih := infohash(infoHash)
 
-	s.deletePeer(ih, peer, pType)
+	_, err := s.deletePeer(ih, peer, pType)
 
-	return nil
+	return err
 }
 
 // PutLeecher implements the PutLeecher method of a storage.PeerStore.
@@ -190,9 +190,9 @@ func (s *PeerStore) DeleteLeecher(infoHash bittorrent.InfoHash, p bittorrent.Pee
 	peer := makePeer(p, peerFlagLeecher, uint16(0))
 	ih := infohash(infoHash)
 
-	s.deletePeer(ih, peer, pType)
+	_, err := s.deletePeer(ih, peer, pType)
 
-	return nil
+	return err
 }
 
 // GraduateLeecher implements the GraduateLeecher method of a storage.PeerStore.
