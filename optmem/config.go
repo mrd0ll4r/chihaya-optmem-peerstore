@@ -3,6 +3,8 @@ package optmem
 import (
 	"errors"
 	"time"
+
+	"github.com/chihaya/chihaya/pkg/log"
 )
 
 var (
@@ -10,9 +12,9 @@ var (
 	// gc_cutoff.
 	ErrInvalidGCCutoff = errors.New("invalid gc_cutoff")
 
-	// ErrInvalidGCInterval is returned for a config with an invalid
-	// gc_interval.
-	ErrInvalidGCInterval = errors.New("invalid gc_interval")
+	// ErrInvalidPeerLifetime is returned for a config with an invalid
+	// peer_lifetime.
+	ErrInvalidPeerLifetime = errors.New("invalid peer_lifetime")
 )
 
 // Config holds the configuration for an optmen PeerStore.
@@ -34,18 +36,24 @@ type Config struct {
 	// are doing.
 	ShardCountBits uint `yaml:"shard_count_bits"`
 
-	// RandomParallelism specifies how many random sources to make available
-	// to use concurrently per shard.
-	//
-	// A higher value decreases lock contention but consumes memory.
-	RandomParallelism uint `yaml:"random_parallelism"`
-
 	// GCInterval is the interval at which garbage collection will run.
 	GCInterval time.Duration `yaml:"gc_interval"`
 
-	// GCCutoff is the maximum duration a peer is allowed to go without
+	// PeerLifetime is the maximum duration a peer is allowed to go without
 	// announcing before being marked for garbage collection.
-	GCCutoff time.Duration `yaml:"gc_cutoff"`
+	PeerLifetime time.Duration `yaml:"peer_lifetime"`
+
+	PrometheusReportingInterval time.Duration `yaml:"prometheus_reporting_interval"`
+}
+
+// LogFields implements log.LogFielder for a Config.
+func (c Config) LogFields() log.Fields {
+	return log.Fields{
+		"shardCountBits":              c.ShardCountBits,
+		"gcInterval":                  c.GCInterval,
+		"peerLifetime":                c.PeerLifetime,
+		"prometheusReportingInterval": c.PrometheusReportingInterval,
+	}
 }
 
 func validateConfig(cfg Config) (Config, error) {
@@ -53,15 +61,11 @@ func validateConfig(cfg Config) (Config, error) {
 		cfg.ShardCountBits = 10
 	}
 
-	if cfg.RandomParallelism < 1 {
-		cfg.RandomParallelism = 8
-	}
-
 	if cfg.GCInterval == 0 {
-		return cfg, ErrInvalidGCInterval
+		return cfg, ErrInvalidPeerLifetime
 	}
 
-	if cfg.GCCutoff == 0 {
+	if cfg.PeerLifetime == 0 {
 		return cfg, ErrInvalidGCCutoff
 	}
 

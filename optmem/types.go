@@ -1,10 +1,8 @@
 package optmem
 
 import (
-	"bytes"
 	"encoding/binary"
 	"fmt"
-	"net"
 
 	"github.com/chihaya/chihaya/bittorrent"
 )
@@ -90,27 +88,4 @@ type swarm struct {
 
 type shard struct {
 	swarms map[infohash]swarm
-	r      *randContainer // a few *rand.Rands to use by multiple goroutines concurrently
-}
-
-type peerType int
-
-const (
-	v4Peer peerType = iota
-	v6Peer
-	invalidPeer
-)
-
-func determinePeerType(p bittorrent.Peer) peerType {
-	switch {
-	case len(p.IP) == net.IPv4len:
-		return v4Peer
-	case len(p.IP) == net.IPv6len:
-		if bytes.Equal(v4InV6Prefix, p.IP[:12]) {
-			return v4Peer
-		}
-		return v6Peer
-	default:
-		return invalidPeer
-	}
 }
