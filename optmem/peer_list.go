@@ -3,9 +3,11 @@ package optmem
 import (
 	"bytes"
 	"math"
-	"math/rand"
 	"sort"
 	"time"
+
+	"github.com/chihaya/chihaya/middleware/pkg/random"
+	"github.com/chihaya/chihaya/pkg/log"
 )
 
 const peerCompareSize = ipLen + portLen
@@ -42,7 +44,6 @@ func (pl *peerList) collectGarbage(cutoffTime, maxDiff uint16) (gc bool) {
 					pl.removePeer(&peer)
 					i--
 				}
-				continue
 			} else {
 				diff := peer.peerTime() - cutoffTime
 				if diff > maxDiff {
@@ -90,7 +91,7 @@ func (pl *peerList) rebalanceBuckets() bool {
 	}
 
 	if targetBuckets >= 1024 {
-		logf("had to do a huge bucket rebalance to %d buckets (have %d peers) (took %s)\n", targetBuckets, pl.numPeers, time.Since(before).String())
+		log.Info("optmem: had to do a huge bucket rebalance", log.Fields{"buckets": targetBuckets, "numPeers": pl.numPeers, "duration": time.Since(before)})
 	}
 	return true
 }
@@ -202,7 +203,7 @@ func (pl *peerList) getAllLeechers() []peer {
 	return leechers
 }
 
-func (pl *peerList) getRandomSeeders(numWant int, r *rand.Rand) []peer {
+func (pl *peerList) getRandomSeeders(numWant int, s0, s1 uint64) []peer {
 	buckets := pl.peerBuckets
 	toReturn := make([]peer, numWant)
 	chosen := 0
@@ -211,8 +212,9 @@ func (pl *peerList) getRandomSeeders(numWant int, r *rand.Rand) []peer {
 		return toReturn
 	}
 
+	bucketOffset := 0
 	for chosen < numWant {
-		bucketOffset := r.Int()
+		bucketOffset, s0, s1 = random.Intn(s0, s1, 1024)
 		for _, b := range buckets {
 			if chosen == numWant {
 				break
@@ -231,7 +233,7 @@ func (pl *peerList) getRandomSeeders(numWant int, r *rand.Rand) []peer {
 	return toReturn
 }
 
-func (pl *peerList) getRandomLeechers(numWant int, r *rand.Rand) []peer {
+func (pl *peerList) getRandomLeechers(numWant int, s0, s1 uint64) []peer {
 	buckets := pl.peerBuckets
 	toReturn := make([]peer, numWant)
 	chosen := 0
@@ -240,8 +242,9 @@ func (pl *peerList) getRandomLeechers(numWant int, r *rand.Rand) []peer {
 		return toReturn
 	}
 
+	bucketOffset := 0
 	for chosen < numWant {
-		bucketOffset := r.Int()
+		bucketOffset, s0, s1 = random.Intn(s0, s1, 1024)
 		for _, b := range buckets {
 			if chosen == numWant {
 				break
@@ -260,7 +263,7 @@ func (pl *peerList) getRandomLeechers(numWant int, r *rand.Rand) []peer {
 	return toReturn
 }
 
-func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer, r *rand.Rand) (peers []peer) {
+func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *peer, s0, s1 uint64) (peers []peer) {
 	if seeder {
 		// seeder announces: only leechers
 		if numWant > pl.numPeers-pl.numSeeders {
@@ -269,7 +272,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 		if numWant == pl.numPeers-pl.numSeeders {
 			return pl.getAllLeechers()
 		}
-		return pl.getRandomLeechers(numWant, r)
+		return pl.getRandomLeechers(numWant, s0, s1)
 	}
 
 	// leecher announces: seeders as many as possible, then leechers
@@ -281,7 +284,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 
 	// we have enough seeders to only return seeders
 	if numWant <= pl.numSeeders {
-		return pl.getRandomSeeders(numWant, r)
+		return pl.getRandomSeeders(numWant, s0, s1)
 	}
 	// we have exactly as many peers as they want
 	if numWant == pl.numPeers {
@@ -299,7 +302,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 	// we don't have enough seeders to only return seeders
 	peers = make([]peer, 0, numWant)
 	peers = append(peers, pl.getAllSeeders()...)
-	leechers := pl.getRandomLeechers(numWant-len(peers), r)
+	leechers := pl.getRandomLeechers(numWant-len(peers), s0, s1)
 	for _, p := range leechers {
 		// filter out the announcing peer
 		if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {

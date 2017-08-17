@@ -5,8 +5,11 @@ import (
 	"runtime"
 	"time"
 
+	"encoding/binary"
+
 	"github.com/chihaya/chihaya/bittorrent"
-	"github.com/chihaya/chihaya/stopper"
+	"github.com/chihaya/chihaya/pkg/log"
+	"github.com/chihaya/chihaya/pkg/stop"
 	"github.com/chihaya/chihaya/storage"
 	"github.com/pkg/errors"
 )
@@ -24,7 +27,7 @@ func New(cfg Config) (*PeerStore, error) {
 	}
 
 	ps := &PeerStore{
-		shards: newShardContainer(cfg.ShardCountBits, cfg.RandomParallelism),
+		shards: newShardContainer(cfg.ShardCountBits),
 		closed: make(chan struct{}),
 		cfg:    cfg,
 	}
@@ -35,13 +38,15 @@ func New(cfg Config) (*PeerStore, error) {
 			case <-ps.closed:
 				return
 			case <-time.After(cfg.GCInterval):
-				cutoffTime := time.Now().Add(cfg.GCCutoff * -1)
-				logln("collecting garbage. Cutoff time: " + cutoffTime.String())
+				cutoffTime := time.Now().Add(cfg.PeerLifetime * -1)
+				log.Debug("optmem: collecting garbage", log.Fields{"cutoffTime": cutoffTime})
 				ps.collectGarbage(cutoffTime)
-				logln("finished collecting garbage")
+				log.Debug("optmem: finished collecting garbage")
 			}
 		}
 	}()
+
+	// TODO prometheus reporting
 
 	return ps, nil
 }
@@ -53,10 +58,15 @@ type PeerStore struct {
 	cfg    Config
 }
 
+// LogFields implements log.LogFielder for a PeerStore.
+func (s *PeerStore) LogFields() log.Fields {
+	return s.cfg.LogFields()
+}
+
 func (s *PeerStore) collectGarbage(cutoff time.Time) {
 	internalCutoff := uint16(cutoff.Unix())
 	maxDiff := uint16(time.Now().Unix() - cutoff.Unix())
-	logf("running GC. internal cutoff: %d, maxDiff: %d, infohashes: %d, peers: %d\n", internalCutoff, maxDiff, s.NumSwarms(), s.NumTotalPeers())
+	log.Debug("optmem: running GC", log.Fields{"internalCutoff": internalCutoff, "maxDiff": maxDiff, "numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		deltaTorrents := 0
@@ -95,7 +105,7 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 		runtime.Gosched()
 	}
 
-	logf("GC done. infohashes: %d, peers: %d\n", s.NumSwarms(), s.NumTotalPeers())
+	log.Debug("optmem: GC done", log.Fields{"numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
 }
 
 // CollectGarbage can be used to manually collect peers older than the given
@@ -119,15 +129,10 @@ func (s *PeerStore) PutSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer) e
 	default:
 	}
 
-	pType := determinePeerType(p)
-	if pType == invalidPeer {
-		return ErrInvalidIP
-	}
-
 	peer := makePeer(p, peerFlagSeeder, uint16(time.Now().Unix()))
 	ih := infohash(infoHash)
 
-	s.putPeer(ih, peer, pType)
+	s.putPeer(ih, peer, p.IP.AddressFamily)
 
 	return nil
 }
@@ -140,15 +145,10 @@ func (s *PeerStore) DeleteSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer
 	default:
 	}
 
-	pType := determinePeerType(p)
-	if pType == invalidPeer {
-		return ErrInvalidIP
-	}
-
 	peer := makePeer(p, peerFlagSeeder, uint16(0))
 	ih := infohash(infoHash)
 
-	_, err := s.deletePeer(ih, peer, pType)
+	_, err := s.deletePeer(ih, peer, p.IP.AddressFamily)
 
 	return err
 }
@@ -161,15 +161,10 @@ func (s *PeerStore) PutLeecher(infoHash bittorrent.InfoHash, p bittorrent.Peer) 
 	default:
 	}
 
-	pType := determinePeerType(p)
-	if pType == invalidPeer {
-		return ErrInvalidIP
-	}
-
 	peer := makePeer(p, peerFlagLeecher, uint16(time.Now().Unix()))
 	ih := infohash(infoHash)
 
-	s.putPeer(ih, peer, pType)
+	s.putPeer(ih, peer, p.IP.AddressFamily)
 
 	return nil
 }
@@ -182,15 +177,10 @@ func (s *PeerStore) DeleteLeecher(infoHash bittorrent.InfoHash, p bittorrent.Pee
 	default:
 	}
 
-	pType := determinePeerType(p)
-	if pType == invalidPeer {
-		return ErrInvalidIP
-	}
-
 	peer := makePeer(p, peerFlagLeecher, uint16(0))
 	ih := infohash(infoHash)
 
-	_, err := s.deletePeer(ih, peer, pType)
+	_, err := s.deletePeer(ih, peer, p.IP.AddressFamily)
 
 	return err
 }
@@ -201,14 +191,14 @@ func (s *PeerStore) GraduateLeecher(infoHash bittorrent.InfoHash, p bittorrent.P
 	return s.PutSeeder(infoHash, p)
 }
 
-func (s *PeerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bool) {
+func (s *PeerStore) putPeer(ih infohash, peer *peer, af bittorrent.AddressFamily) (created bool) {
 	shard := s.shards.lockShardByHash(ih)
 
 	var pl swarm
 	var ok bool
 	if pl, ok = shard.swarms[ih]; !ok {
 		created = true
-		if pType == v4Peer {
+		if af == bittorrent.IPv4 {
 			pl = swarm{peers4: newPeerList()}
 		} else {
 			pl = swarm{peers6: newPeerList()}
@@ -216,7 +206,7 @@ func (s *PeerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bo
 		shard.swarms[ih] = pl
 	}
 
-	if pType == v4Peer {
+	if af == bittorrent.IPv4 {
 		if pl.peers4 == nil {
 			pl.peers4 = newPeerList()
 			shard.swarms[ih] = pl
@@ -242,7 +232,7 @@ func (s *PeerStore) putPeer(ih infohash, peer *peer, pType peerType) (created bo
 	return
 }
 
-func (s *PeerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted bool, err error) {
+func (s *PeerStore) deletePeer(ih infohash, peer *peer, af bittorrent.AddressFamily) (deleted bool, err error) {
 	shard := s.shards.lockShardByHash(ih)
 	defer func() {
 		if deleted {
@@ -258,7 +248,7 @@ func (s *PeerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 		return false, storage.ErrResourceDoesNotExist
 	}
 
-	if pType == v4Peer {
+	if af == bittorrent.IPv4 {
 		if pl.peers4 == nil {
 			return false, storage.ErrResourceDoesNotExist
 		}
@@ -300,6 +290,12 @@ func (s *PeerStore) deletePeer(ih infohash, peer *peer, pType peerType) (deleted
 	return
 }
 
+func deriveEntropyFromRequest(infoHash bittorrent.InfoHash, p bittorrent.Peer) (uint64, uint64) {
+	v0 := binary.BigEndian.Uint64([]byte(infoHash[:8])) + binary.BigEndian.Uint64([]byte(infoHash[8:16]))
+	v1 := binary.BigEndian.Uint64([]byte(p.ID[:8])) + binary.BigEndian.Uint64([]byte(p.ID[8:16]))
+	return v0, v1
+}
+
 // AnnouncePeers implements the AnnouncePeers method of a storage.PeerStore.
 func (s *PeerStore) AnnouncePeers(infoHash bittorrent.InfoHash, seeder bool, numWant int, announcingPeer bittorrent.Peer) ([]bittorrent.Peer, error) {
 	select {
@@ -310,25 +306,27 @@ func (s *PeerStore) AnnouncePeers(infoHash bittorrent.InfoHash, seeder bool, num
 
 	ih := infohash(infoHash)
 
-	if len(announcingPeer.IP) != net.IPv4len && len(announcingPeer.IP) != net.IPv6len {
+	// TODO maybe remove?
+	if len(announcingPeer.IP.IP) != net.IPv4len && len(announcingPeer.IP.IP) != net.IPv6len {
 		return nil, ErrInvalidIP
 	}
+	s0, s1 := deriveEntropyFromRequest(infoHash, announcingPeer)
 
 	p := &peer{}
 	p.setPort(announcingPeer.Port)
-	switch {
-	case announcingPeer.IP.To4() != nil:
+	switch announcingPeer.IP.AddressFamily {
+	case bittorrent.IPv4:
 		p.setIP(announcingPeer.IP.To16())
-		return s.announceSingleStack(ih, seeder, numWant, p, v4Peer)
-	case announcingPeer.IP.To16() != nil:
+		return s.announceSingleStack(ih, seeder, numWant, p, bittorrent.IPv4, s0, s1)
+	case bittorrent.IPv6:
 		p.setIP(announcingPeer.IP.To16())
-		return s.announceSingleStack(ih, seeder, numWant, p, v6Peer)
+		return s.announceSingleStack(ih, seeder, numWant, p, bittorrent.IPv6, s0, s1)
 	default:
-		panic("peer was neither v4 nor v6 even after we checked")
+		panic("peer was neither v4 nor v6")
 	}
 }
 
-func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p *peer, pType peerType) (peers []bittorrent.Peer, err error) {
+func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p *peer, af bittorrent.AddressFamily, s0, s1 uint64) (peers []bittorrent.Peer, err error) {
 	shard := s.shards.rLockShardByHash(ih)
 
 	var pl swarm
@@ -339,28 +337,26 @@ func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 	}
 
 	var ps []peer
-	r := shard.r.Get()
-	if pType == v4Peer {
-		ps = pl.peers4.getAnnouncePeers(numWant, seeder, p, r)
+	if af == bittorrent.IPv4 {
+		ps = pl.peers4.getAnnouncePeers(numWant, seeder, p, s0, s1)
 	} else {
-		ps = pl.peers6.getAnnouncePeers(numWant, seeder, p, r)
+		ps = pl.peers6.getAnnouncePeers(numWant, seeder, p, s0, s1)
 	}
-	shard.r.Put(r)
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps {
-		if pType == v4Peer {
-			peers = append(peers, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+		if af == bittorrent.IPv4 {
+			peers = append(peers, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
 			continue
 		}
-		peers = append(peers, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers = append(peers, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()), AddressFamily: bittorrent.IPv6}, Port: p.port()})
 	}
 
 	return
 }
 
 // ScrapeSwarm implements the ScrapeSwarm method of a storage.PeerStore.
-func (s *PeerStore) ScrapeSwarm(infoHash bittorrent.InfoHash, v6 bool) (scrape bittorrent.Scrape) {
+func (s *PeerStore) ScrapeSwarm(infoHash bittorrent.InfoHash, af bittorrent.AddressFamily) (scrape bittorrent.Scrape) {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
@@ -378,19 +374,16 @@ func (s *PeerStore) ScrapeSwarm(infoHash bittorrent.InfoHash, v6 bool) (scrape b
 		return
 	}
 
-	if v6 {
+	if af == bittorrent.IPv6 {
 		if pl.peers6 != nil {
 			scrape.Complete = uint32(pl.peers6.numSeeders)
 			scrape.Incomplete = uint32(pl.peers6.numPeers - pl.peers6.numSeeders)
 		}
-		s.shards.rUnlockShardByHash(ih)
-		return
-	}
-
-	// v4
-	if pl.peers4 != nil {
-		scrape.Complete = uint32(pl.peers4.numSeeders)
-		scrape.Incomplete = uint32(pl.peers4.numPeers - pl.peers4.numSeeders)
+	} else {
+		if pl.peers4 != nil {
+			scrape.Complete = uint32(pl.peers4.numSeeders)
+			scrape.Incomplete = uint32(pl.peers4.numPeers - pl.peers4.numSeeders)
+		}
 	}
 	s.shards.rUnlockShardByHash(ih)
 	return
@@ -457,8 +450,6 @@ func (s *PeerStore) NumLeechers(infoHash bittorrent.InfoHash) int {
 	return totalLeechers
 }
 
-var v4InV6Prefix = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff}
-
 // GetSeeders returns all seeders for the given infohash.
 func (s *PeerStore) GetSeeders(infoHash bittorrent.InfoHash) (peers4, peers6 []bittorrent.Peer, err error) {
 	select {
@@ -489,11 +480,11 @@ func (s *PeerStore) GetSeeders(infoHash bittorrent.InfoHash) (peers4, peers6 []b
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
 	}
 
 	for _, p := range ps6 {
-		peers6 = append(peers6, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers6 = append(peers6, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()), AddressFamily: bittorrent.IPv6}, Port: p.port()})
 	}
 
 	return
@@ -529,11 +520,11 @@ func (s *PeerStore) GetLeechers(infoHash bittorrent.InfoHash) (peers4, peers6 []
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, bittorrent.Peer{IP: net.IP(p.ip()).To4(), Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
 	}
 
 	for _, p := range ps6 {
-		peers6 = append(peers6, bittorrent.Peer{IP: net.IP(p.ip()), Port: p.port()})
+		peers6 = append(peers6, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()), AddressFamily: bittorrent.IPv6}, Port: p.port()})
 	}
 
 	return
@@ -543,12 +534,12 @@ func (s *PeerStore) GetLeechers(infoHash bittorrent.InfoHash) (peers4, peers6 []
 func (s *PeerStore) Stop() <-chan error {
 	select {
 	case <-s.closed:
-		return stopper.AlreadyStopped
+		return stop.AlreadyStopped
 	default:
 	}
 	toReturn := make(chan error)
 	go func() {
-		s.shards = newShardContainer(s.cfg.ShardCountBits, s.cfg.RandomParallelism)
+		s.shards = newShardContainer(s.cfg.ShardCountBits)
 		close(s.closed)
 		close(toReturn)
 	}()
