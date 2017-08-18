@@ -52,6 +52,7 @@ chihaya:
 Where the parameters are:
 
 - `shard_count_bits` specifies the number of bits to use to index shards (parts of the infohash key space).  
+    The peer store will create 2 to the power of `shard_count_bits` shards.
     For example:
     - `shard_count_bits: 1` will create two shards, each responsible for half of all possible infohashes
     - `shard_count_bits: 2` will create four shards, each responsible for a quarter of all possible infohashes
@@ -85,6 +86,8 @@ This limits the maximum age of peers to have working garbage collection.
 Determining the limit is left as an exercise for the reader.
 
 ## Data representation
+The peer store holds a list of shards, each responsible for a fraction of the entire keyspace of possible infohashes.
+
 Each shard is a lockable map of infohashes to their swarms.
 This allows for smaller locks and more concurrency.
 
@@ -103,10 +106,13 @@ Thanks to erdgeist for opentracker and allowing me to reuse a bunch of the data 
 [opentracker]: https://erdgeist.org/arts/software/opentracker/
 
 ## Performance
+Note that the method to determine the amount of memory used is imprecise, especially for small amounts of memory.
+
 Here are some memory usages for many infohashes:
 
 ```
-Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m peer_lifetime:5m prometheus_reporting_interval:5m]...1 infohashes...
+Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m peer_lifetime:5m prometheus_reporting_interval:5m]...
+1 infohashes...
         1 seeders,         0 leechers:	         108016B (       105KiB)
 
 2 infohashes...
