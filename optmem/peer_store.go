@@ -84,8 +84,9 @@ func recordGCDuration(duration time.Duration) {
 // prometheus.
 func (s *PeerStore) populateProm() {
 	storage.PromInfohashesCount.Set(float64(s.NumSwarms()))
-	storage.PromSeedersCount.Set(float64(s.NumTotalSeeders()))
-	storage.PromLeechersCount.Set(float64(s.NumTotalLeechers()))
+	seeders, leechers := s.NumTotalPeers()
+	storage.PromSeedersCount.Set(float64(seeders))
+	storage.PromLeechersCount.Set(float64(leechers))
 }
 
 // LogFields implements log.LogFielder for a PeerStore.
@@ -97,7 +98,8 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 	start := time.Now()
 	internalCutoff := uint16(cutoff.Unix())
 	maxDiff := uint16(time.Now().Unix() - cutoff.Unix())
-	log.Debug("optmem: running GC", log.Fields{"internalCutoff": internalCutoff, "maxDiff": maxDiff, "numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
+	seeders, leechers := s.NumTotalPeers()
+	log.Debug("optmem: running GC", log.Fields{"internalCutoff": internalCutoff, "maxDiff": maxDiff, "numInfohashes": s.NumSwarms(), "numPeers": seeders + leechers})
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		deltaTorrents := 0
@@ -137,7 +139,8 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 	}
 
 	recordGCDuration(time.Since(start))
-	log.Debug("optmem: GC done", log.Fields{"numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
+	seeders, leechers = s.NumTotalPeers()
+	log.Debug("optmem: GC done", log.Fields{"numInfohashes": s.NumSwarms(), "numPeers": seeders + leechers})
 }
 
 // CollectGarbage can be used to manually collect peers older than the given
@@ -580,7 +583,7 @@ func (s *PeerStore) Stop() <-chan error {
 
 // NumSwarms returns the total number of swarms tracked by the PeerStore.
 // This is the same as the amount of infohashes tracked.
-// Runs in constant time.
+// Runs in constant time, is exactly accurate.
 func (s *PeerStore) NumSwarms() uint64 {
 	select {
 	case <-s.closed:
@@ -591,88 +594,31 @@ func (s *PeerStore) NumSwarms() uint64 {
 	return s.shards.getTorrentCount()
 }
 
-// NumTotalSeeders returns the total number of seeders tracked by the PeerStore.
-// Runs in linear time in regards to the number of swarms tracked.
-func (s *PeerStore) NumTotalSeeders() uint64 {
-	select {
-	case <-s.closed:
-		panic("attempted to interact with closed store")
-	default:
-	}
-
-	n := uint64(0)
-
-	for i := 0; i < len(s.shards.shards); i++ {
-		shard := s.shards.rLockShard(i)
-		for _, s := range shard.swarms {
-			if s.peers4 != nil {
-				n += uint64(s.peers4.numSeeders)
-			}
-			if s.peers6 != nil {
-				n += uint64(s.peers6.numSeeders)
-			}
-		}
-		s.shards.rUnlockShard(i)
-		runtime.Gosched()
-	}
-
-	return n
-}
-
-// NumTotalLeechers returns the total number of leechers tracked by the
-// PeerStore.
-// Runs in linear time in regards to the number of swarms tracked.
-func (s *PeerStore) NumTotalLeechers() uint64 {
-	select {
-	case <-s.closed:
-		panic("attempted to interact with closed store")
-	default:
-	}
-
-	n := uint64(0)
-
-	for i := 0; i < len(s.shards.shards); i++ {
-		shard := s.shards.rLockShard(i)
-		for _, s := range shard.swarms {
-			if s.peers4 != nil {
-				n += uint64(s.peers4.numPeers - s.peers4.numSeeders)
-			}
-			if s.peers6 != nil {
-				n += uint64(s.peers4.numPeers - s.peers6.numSeeders)
-			}
-		}
-		s.shards.rUnlockShard(i)
-		runtime.Gosched()
-	}
-
-	return n
-}
-
 // NumTotalPeers returns the total number of peers tracked by the PeerStore.
-// Runs in linear time in regards to the number of swarms tracked.
-// Call this instead of calling NumTotalLeechers + NumTotalSeeders.
-func (s *PeerStore) NumTotalPeers() uint64 {
+// Runs in linear time in regards to the number of swarms tracked. The numbers
+// returned are approximate.
+func (s *PeerStore) NumTotalPeers() (seeders, leechers uint64) {
 	select {
 	case <-s.closed:
 		panic("attempted to interact with closed store")
 	default:
 	}
 
-	n := uint64(0)
-
 	for i := 0; i < len(s.shards.shards); i++ {
 		shard := s.shards.rLockShard(i)
 		for _, s := range shard.swarms {
 			if s.peers4 != nil {
-				n += uint64(s.peers4.numPeers)
+				leechers += uint64(s.peers4.numPeers - s.peers4.numSeeders)
+				seeders += uint64(s.peers4.numSeeders)
 			}
 			if s.peers6 != nil {
-				n += uint64(s.peers6.numPeers)
+				leechers += uint64(s.peers6.numPeers - s.peers6.numSeeders)
+				seeders += uint64(s.peers6.numSeeders)
 			}
 		}
 		s.shards.rUnlockShard(i)
 		runtime.Gosched()
 	}
 
-	return n
+	return seeders, leechers
 }
