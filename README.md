@@ -23,14 +23,14 @@ go get github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
 Next you need to import it in your chihaya binary, like so:
 
 ```go
-import "github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem"
+import _ "github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem"
 ```
 
-Now modify your config to hold a config for `optmem` and parse it, then create the storage for the tracker backend from it.
+Now modify your config to use `optmem` as the storage, see the config below for an example.
 
 
 ## Configuration
-A typical configuration of `optmem` would look like this:
+A typical configuration could look like this:
 
 ```yaml
 chihaya:
@@ -39,10 +39,12 @@ chihaya:
 #   ... more tracker config ... 
 
   storage:
-    shard_count_bits: 10
-    random_parallelism: 8
-    gc_interval: 2m
-    gc_cutoff: 12m
+    name: optmem
+    config:
+      shard_count_bits: 10
+      gc_interval: 2m
+      peer_lifetime: 16m
+      prometheus_reporting_interval: 1s
 
 # ... more configuration ...
 ```
@@ -54,7 +56,7 @@ Where the parameters are:
     - `shard_count_bits: 1` will create two shards, each responsible for half of all possible infohashes
     - `shard_count_bits: 2` will create four shards, each responsible for a quarter of all possible infohashes
     - `shard_count_bits: 10` will create 1024 shards, each responsible for 1/1024th of all possible infohashes
-    - `shard_count_bits: 0` will be interpreted as `shard_count_bits: 10`
+    - `shard_count_bits: 0` will default to `shard_count_bits: 10`
     
     Creating a shard takes a small amount of memory, even without actually storing any infohashes.
     Having many shards therefore increases the base memory usage of the peer store, but does not affect the amount of memory a single infohash takes.
@@ -63,16 +65,16 @@ Where the parameters are:
     
     Unless you really know what you're doing, using at least 1024 shards is recommended.
     
-- `random_parallelism` specifies the number of parallel random sources to be used per shard.  
-    A higher number improves lock contention but consumes a lot of memory.
-    A value of zero will be interpreted as a value of 8.
-    
 - `gc_interval` is the interval at which (or rather: the pause between) garbage collection runs.  
     Garbage collection collects peers that have not announced for a certain amount of time and empty swarms.
     
-- `gc_cutoff` is the maximum duration a peer is allowed to go without announcing before being marked for garbage collection.  
+- `peer_lifetime` is the maximum duration a peer is allowed to go without announcing before being marked for garbage collection.  
     A low multiple of the announce interval is recommended.
-    For example: If the announce interval is 10 minutes, choose 11 to 15 minutes for the `gc_cutoff`.
+    For example: If the announce interval is 10 minutes, choose 11 to 15 minutes for the `peer_lifetime`.
+
+- `prometheus_reporting_interval` is the interval at which metrics will be aggregated and reported to Prometheus.  
+    Collecting these metrics, although it's usually very fast, runs in linear time in regards to the number of swarms (=infohashes) tracked.
+    If your tracker is very large, it might be beneficial to increase the reporting interval.
 
 ## Limitations
 This `PeerStore` does not save PeerIDs.
@@ -96,7 +98,7 @@ Each peer is a byte array, a concatenation of its IP (as an IPv6 address), Port,
 
 The data representation is largely inspired by [opentracker].
 Make sure to check it out.
-Thanks to erdgeist for that great piece of software!
+Thanks to erdgeist for opentracker and allowing me to reuse a bunch of the data structures!
 
 [opentracker]: https://erdgeist.org/arts/software/opentracker/
 
@@ -104,256 +106,259 @@ Thanks to erdgeist for that great piece of software!
 Here are some memory usages for many infohashes:
 
 ```
-Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m gc_cutoff:5m random_parallelism:8]...
-1 infohashes...
-        1 seeders,         0 leechers:         44458976B (     43416KiB,     42.4MiB)
+Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m peer_lifetime:5m prometheus_reporting_interval:5m]...1 infohashes...
+        1 seeders,         0 leechers:	         108016B (       105KiB)
 
 2 infohashes...
-        1 seeders,         0 leechers:         44459568B (     43417KiB,     42.4MiB)
+        1 seeders,         0 leechers:	         108496B (       105KiB)
 
 5 infohashes...
-        1 seeders,         0 leechers:         44461088B (     43419KiB,     42.4MiB)
+        1 seeders,         0 leechers:	         109840B (       107KiB)
 
 10 infohashes...
-        1 seeders,         0 leechers:         44462560B (     43420KiB,     42.4MiB)
+        1 seeders,         0 leechers:	           5312B (         5KiB)
 
 20 infohashes...
-        1 seeders,         0 leechers:         44467280B (     43425KiB,     42.4MiB)
+        1 seeders,         0 leechers:	           9312B (         9KiB)
 
 50 infohashes...
-        1 seeders,         0 leechers:         44476768B (     43434KiB,     42.4MiB)
+        1 seeders,         0 leechers:	         126000B (       123KiB)
 
 100 infohashes...
-        1 seeders,         0 leechers:         44489520B (     43446KiB,     42.4MiB)
+        1 seeders,         0 leechers:	          32832B (        32KiB)
 
 200 infohashes...
-        1 seeders,         0 leechers:         44507808B (     43464KiB,     42.4MiB)
+        1 seeders,         0 leechers:	         159696B (       155KiB)
 
 500 infohashes...
-        1 seeders,         0 leechers:         44561600B (     43517KiB,     42.5MiB)
+        1 seeders,         0 leechers:	         211440B (       206KiB)
 
 1000 infohashes...
-        1 seeders,         0 leechers:         44667168B (     43620KiB,     42.6MiB)
+        1 seeders,         0 leechers:	         314352B (       306KiB)
 
 2000 infohashes...
-        1 seeders,         0 leechers:         44878896B (     43827KiB,     42.8MiB)
+        1 seeders,         0 leechers:	         531408B (       518KiB)
 
 5000 infohashes...
-        1 seeders,         0 leechers:         45514720B (     44447KiB,     43.4MiB)
+        1 seeders,         0 leechers:	        1024416B (      1000KiB)
 
 10000 infohashes...
-        1 seeders,         0 leechers:         46566704B (     45475KiB,     44.4MiB)
+        1 seeders,         0 leechers:	        2033904B (      1986KiB,      1.9MiB)
 
 20000 infohashes...
-        1 seeders,         0 leechers:         48625696B (     47486KiB,     46.4MiB)
+        1 seeders,         0 leechers:	        4258192B (      4158KiB,      4.1MiB)
 
 50000 infohashes...
-        1 seeders,         0 leechers:         54331392B (     53058KiB,     51.8MiB)
+        1 seeders,         0 leechers:	        9819472B (      9589KiB,      9.4MiB)
 
 100000 infohashes...
-        1 seeders,         0 leechers:         64149600B (     62646KiB,     61.2MiB)
+        1 seeders,         0 leechers:	       19680000B (     19218KiB,     18.8MiB)
 
 200000 infohashes...
-        1 seeders,         0 leechers:         83227648B (     81277KiB,     79.4MiB)
+        1 seeders,         0 leechers:	       38821056B (     37911KiB,     37.0MiB)
 
 500000 infohashes...
-        1 seeders,         0 leechers:        171585264B (    167563KiB,    163.6MiB)
+        1 seeders,         0 leechers:	      127085184B (    124106KiB,    121.2MiB)
 
 1000000 infohashes...
-        1 seeders,         0 leechers:        301919584B (    294843KiB,    287.9MiB)
+        1 seeders,         0 leechers:	      257648992B (    251610KiB,    245.7MiB)
 
 2000000 infohashes...
-        1 seeders,         0 leechers:        566868928B (    553582KiB,    540.6MiB)
+        1 seeders,         0 leechers:	      522542576B (    510295KiB,    498.3MiB)
 
 5000000 infohashes...
-        1 seeders,         0 leechers:       1047903088B (   1023342KiB,    999.4MiB)
+        1 seeders,         0 leechers:	     1003537520B (    980017KiB,    957.0MiB)
+
+10000000 infohashes...
+        1 seeders,         0 leechers:	     2007018496B (   1959979KiB,   1914.0MiB, 1.9GiB)
 ```
 
 And here are some memory usages for a lot of peers for a single infohash:
 
 ```
-Testing peer store "optmem", Config: map[gc_interval:5m gc_cutoff:5m random_parallelism:8 shard_count_bits:10]...
+Testing peer store "optmem", Config: map[shard_count_bits:10 gc_interval:5m peer_lifetime:5m prometheus_reporting_interval:5m]...
 1 infohashes...
-        0 seeders,         1 leechers:              976B
-        1 seeders,         1 leechers:              704B
-        1 seeders,         1 leechers:              864B
-        5 seeders,         5 leechers:              864B
-       10 seeders,        10 leechers:             1424B (         1KiB)
-       25 seeders,        25 leechers:             2208B (         2KiB)
-       50 seeders,        50 leechers:             3536B (         3KiB)
-      100 seeders,       100 leechers:             6368B (         6KiB)
-      250 seeders,       250 leechers:            13296B (        12KiB)
-      500 seeders,       500 leechers:            25616B (        25KiB)
-     1000 seeders,      1000 leechers:            50048B (        48KiB)
-     2500 seeders,      2500 leechers:           194704B (       190KiB)
-     5000 seeders,      5000 leechers:           391984B (       382KiB)
-    10000 seeders,     10000 leechers:           776976B (       758KiB)
-    25000 seeders,     25000 leechers:          1579632B (      1542KiB,      1.5MiB)
-    50000 seeders,     50000 leechers:          3158880B (      3084KiB,      3.0MiB)
-   100000 seeders,    100000 leechers:          6321088B (      6172KiB,      6.0MiB)
-   250000 seeders,    250000 leechers:         12663360B (     12366KiB,     12.1MiB)
-   500000 seeders,    500000 leechers:         25295472B (     24702KiB,     24.1MiB)
-  1000000 seeders,   1000000 leechers:         50565792B (     49380KiB,     48.2MiB)
-  2500000 seeders,   2500000 leechers:        194642688B (    190080KiB,    185.6MiB)
-  5000000 seeders,   5000000 leechers:        388961120B (    379844KiB,    370.9MiB)
- 10000000 seeders,  10000000 leechers:        822362032B (    803087KiB,    784.3MiB)
-
+        0 seeders,         1 leechers:	           1088B (         1KiB)
+        1 seeders,         1 leechers:	           1312B (         1KiB)
+        1 seeders,         1 leechers:	           1504B (         1KiB)
+        5 seeders,         5 leechers:	           1200B (         1KiB)
+       10 seeders,        10 leechers:	           1424B (         1KiB)
+       25 seeders,        25 leechers:	           2240B (         2KiB)
+       50 seeders,        50 leechers:	           4064B (         3KiB)
+      100 seeders,       100 leechers:	           7392B (         7KiB)
+      250 seeders,       250 leechers:	          13536B (        13KiB)
+      500 seeders,       500 leechers:	          26096B (        25KiB)
+     1000 seeders,      1000 leechers:	          50320B (        49KiB)
+     2500 seeders,      2500 leechers:	         183216B (       178KiB)
+     5000 seeders,      5000 leechers:	         352080B (       343KiB)
+    10000 seeders,     10000 leechers:	         712528B (       695KiB)
+    25000 seeders,     25000 leechers:	        1581904B (      1544KiB,      1.5MiB)
+    50000 seeders,     50000 leechers:	        3158768B (      3084KiB,      3.0MiB)
+   100000 seeders,    100000 leechers:	        6319616B (      6171KiB,      6.0MiB)
+   250000 seeders,    250000 leechers:	       12655744B (     12359KiB,     12.1MiB)
+   500000 seeders,    500000 leechers:	       25302192B (     24709KiB,     24.1MiB)
+  1000000 seeders,   1000000 leechers:	       50605152B (     49419KiB,     48.3MiB)
+  2500000 seeders,   2500000 leechers:	      170454192B (    166459KiB,    162.6MiB)
+  5000000 seeders,   5000000 leechers:	      340471120B (    332491KiB,    324.7MiB)
+ 10000000 seeders,  10000000 leechers:	      681634512B (    665658KiB,    650.1MiB)
+ 25000000 seeders,  25000000 leechers:	     1616537632B (   1578650KiB,   1541.7MiB, 1.5GiB)
 ```
 
 Note that there are no differences between IPv4 and IPv6 peers regarding memory usage.
 
-Here's a benchmark comparison between the chihaya `memory` implementation (old) and this implementation (new):
+Here's a benchmark comparison between the chihaya `memory` implementation (old) and this implementation (new).
+The benchmarks were done on go 1.8, August 18 2017:
 
 ```
 benchmark                                 old ns/op     new ns/op     delta
-BenchmarkPut                              369           297           -19.51%
-BenchmarkPut-8                            545           485           -11.01%
-BenchmarkPut1k                            369           651           +76.42%
-BenchmarkPut1k-8                          597           790           +32.33%
-BenchmarkPut1kInfohash                    397           419           +5.54%
-BenchmarkPut1kInfohash-8                  109           83.3          -23.58%
-BenchmarkPut1kInfohash1k                  402           404           +0.50%
-BenchmarkPut1kInfohash1k-8                111           84.0          -24.32%
-BenchmarkPutDelete                        1224          1308          +6.86%
-BenchmarkPutDelete-8                      3126          1680          -46.26%
-BenchmarkPutDelete1k                      1225          1430          +16.73%
-BenchmarkPutDelete1k-8                    3147          1683          -46.52%
-BenchmarkPutDelete1kInfohash              1315          1422          +8.14%
-BenchmarkPutDelete1kInfohash-8            3213          1645          -48.80%
-BenchmarkPutDelete1kInfohash1k            1281          1436          +12.10%
-BenchmarkPutDelete1kInfohash1k-8          3075          1592          -48.23%
-BenchmarkDeleteNonexist                   211           400           +89.57%
-BenchmarkDeleteNonexist-8                 255           566           +121.96%
-BenchmarkDeleteNonexist1k                 210           351           +67.14%
-BenchmarkDeleteNonexist1k-8               254           590           +132.28%
-BenchmarkDeleteNonexist1kInfohash         221           374           +69.23%
-BenchmarkDeleteNonexist1kInfohash-8       63.7          91.6          +43.80%
-BenchmarkDeleteNonexist1kInfohash1k       223           366           +64.13%
-BenchmarkDeleteNonexist1kInfohash1k-8     63.8          92.2          +44.51%
-BenchmarkPutGradDelete                    1832          1723          -5.95%
-BenchmarkPutGradDelete-8                  4443          2018          -54.58%
-BenchmarkPutGradDelete1k                  1864          1764          -5.36%
-BenchmarkPutGradDelete1k-8                5013          1946          -61.18%
-BenchmarkPutGradDelete1kInfohash          1957          1639          -16.25%
-BenchmarkPutGradDelete1kInfohash-8        4677          2022          -56.77%
-BenchmarkPutGradDelete1kInfohash1k        1936          1883          -2.74%
-BenchmarkPutGradDelete1kInfohash1k-8      4713          1895          -59.79%
-BenchmarkGradNonexist                     377           371           -1.59%
-BenchmarkGradNonexist-8                   614           495           -19.38%
-BenchmarkGradNonexist1k                   403           541           +34.24%
-BenchmarkGradNonexist1k-8                 683           804           +17.72%
-BenchmarkGradNonexist1kInfohash           437           395           -9.61%
-BenchmarkGradNonexist1kInfohash-8         117           85.5          -26.92%
-BenchmarkGradNonexist1kInfohash1k         433           389           -10.16%
-BenchmarkGradNonexist1kInfohash1k-8       121           85.6          -29.26%
-BenchmarkAnnounceLeecher                  17126         11274         -34.17%
-BenchmarkAnnounceLeecher-8                4099          3168          -22.71%
-BenchmarkAnnounceLeecher1kInfohash        21358         16074         -24.74%
-BenchmarkAnnounceLeecher1kInfohash-8      4986          4220          -15.36%
-BenchmarkAnnounceSeeder                   17283         11775         -31.87%
-BenchmarkAnnounceSeeder-8                 4116          3281          -20.29%
-BenchmarkAnnounceSeeder1kInfohash         21358         16181         -24.24%
-BenchmarkAnnounceSeeder1kInfohash-8       4972          4229          -14.94%
+BenchmarkPut                              450           304           -32.44%
+BenchmarkPut-4                            564           438           -22.34%
+BenchmarkPut1k                            478           483           +1.05%
+BenchmarkPut1k-4                          627           651           +3.83%
+BenchmarkPut1kInfohash                    530           336           -36.60%
+BenchmarkPut1kInfohash-4                  178           125           -29.78%
+BenchmarkPut1kInfohash1k                  543           338           -37.75%
+BenchmarkPut1kInfohash1k-4                168           122           -27.38%
+BenchmarkPutDelete                        1505          1322          -12.16%
+BenchmarkPutDelete-4                      1719          2365          +37.58%
+BenchmarkPutDelete1k                      1621          1415          -12.71%
+BenchmarkPutDelete1k-4                    1753          2217          +26.47%
+BenchmarkPutDelete1kInfohash              1641          1499          -8.65%
+BenchmarkPutDelete1kInfohash-4            1709          2296          +34.35%
+BenchmarkPutDelete1kInfohash1k            1630          1472          -9.69%
+BenchmarkPutDelete1kInfohash1k-4          1664          2191          +31.67%
+BenchmarkDeleteNonexist                   243           371           +52.67%
+BenchmarkDeleteNonexist-4                 199           436           +119.10%
+BenchmarkDeleteNonexist1k                 251           357           +42.23%
+BenchmarkDeleteNonexist1k-4               202           469           +132.18%
+BenchmarkDeleteNonexist1kInfohash         257           399           +55.25%
+BenchmarkDeleteNonexist1kInfohash-4       90.5          125           +38.12%
+BenchmarkDeleteNonexist1kInfohash1k       254           374           +47.24%
+BenchmarkDeleteNonexist1kInfohash1k-4     95.5          112           +17.28%
+BenchmarkPutGradDelete                    2350          1694          -27.91%
+BenchmarkPutGradDelete-4                  2512          3330          +32.56%
+BenchmarkPutGradDelete1k                  2367          1689          -28.64%
+BenchmarkPutGradDelete1k-4                2479          3377          +36.22%
+BenchmarkPutGradDelete1kInfohash          2711          1721          -36.52%
+BenchmarkPutGradDelete1kInfohash-4        3494          3942          +12.82%
+BenchmarkPutGradDelete1kInfohash1k        2638          1780          -32.52%
+BenchmarkPutGradDelete1kInfohash1k-4      4228          3038          -28.15%
+BenchmarkGradNonexist                     529           310           -41.40%
+BenchmarkGradNonexist-4                   617           444           -28.04%
+BenchmarkGradNonexist1k                   543           474           -12.71%
+BenchmarkGradNonexist1k-4                 731           702           -3.97%
+BenchmarkGradNonexist1kInfohash           581           353           -39.24%
+BenchmarkGradNonexist1kInfohash-4         184           122           -33.70%
+BenchmarkGradNonexist1kInfohash1k         607           353           -41.85%
+BenchmarkGradNonexist1kInfohash1k-4       182           133           -26.92%
+BenchmarkAnnounceLeecher                  18966         10460         -44.85%
+BenchmarkAnnounceLeecher-4                5992          4306          -28.14%
+BenchmarkAnnounceLeecher1kInfohash        23218         15590         -32.85%
+BenchmarkAnnounceLeecher1kInfohash-4      6861          5132          -25.20%
+BenchmarkAnnounceSeeder                   19092         10068         -47.27%
+BenchmarkAnnounceSeeder-4                 6122          3834          -37.37%
+BenchmarkAnnounceSeeder1kInfohash         23571         15130         -35.81%
+BenchmarkAnnounceSeeder1kInfohash-4       6601          5617          -14.91%
 
 benchmark                                 old allocs     new allocs     delta
 BenchmarkPut                              2              1              -50.00%
-BenchmarkPut-8                            2              1              -50.00%
+BenchmarkPut-4                            2              1              -50.00%
 BenchmarkPut1k                            2              1              -50.00%
-BenchmarkPut1k-8                          2              1              -50.00%
+BenchmarkPut1k-4                          2              1              -50.00%
 BenchmarkPut1kInfohash                    2              1              -50.00%
-BenchmarkPut1kInfohash-8                  2              1              -50.00%
+BenchmarkPut1kInfohash-4                  2              1              -50.00%
 BenchmarkPut1kInfohash1k                  2              1              -50.00%
-BenchmarkPut1kInfohash1k-8                2              1              -50.00%
+BenchmarkPut1kInfohash1k-4                2              1              -50.00%
 BenchmarkPutDelete                        6              7              +16.67%
-BenchmarkPutDelete-8                      6              7              +16.67%
+BenchmarkPutDelete-4                      6              7              +16.67%
 BenchmarkPutDelete1k                      6              7              +16.67%
-BenchmarkPutDelete1k-8                    6              7              +16.67%
+BenchmarkPutDelete1k-4                    6              7              +16.67%
 BenchmarkPutDelete1kInfohash              6              7              +16.67%
-BenchmarkPutDelete1kInfohash-8            6              7              +16.67%
+BenchmarkPutDelete1kInfohash-4            6              7              +16.67%
 BenchmarkPutDelete1kInfohash1k            6              7              +16.67%
-BenchmarkPutDelete1kInfohash1k-8          6              7              +16.67%
+BenchmarkPutDelete1kInfohash1k-4          6              7              +16.67%
 BenchmarkDeleteNonexist                   2              2              +0.00%
-BenchmarkDeleteNonexist-8                 2              2              +0.00%
+BenchmarkDeleteNonexist-4                 2              2              +0.00%
 BenchmarkDeleteNonexist1k                 2              2              +0.00%
-BenchmarkDeleteNonexist1k-8               2              2              +0.00%
+BenchmarkDeleteNonexist1k-4               2              2              +0.00%
 BenchmarkDeleteNonexist1kInfohash         2              2              +0.00%
-BenchmarkDeleteNonexist1kInfohash-8       2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash-4       2              2              +0.00%
 BenchmarkDeleteNonexist1kInfohash1k       2              2              +0.00%
-BenchmarkDeleteNonexist1kInfohash1k-8     2              2              +0.00%
+BenchmarkDeleteNonexist1kInfohash1k-4     2              2              +0.00%
 BenchmarkPutGradDelete                    9              8              -11.11%
-BenchmarkPutGradDelete-8                  9              8              -11.11%
+BenchmarkPutGradDelete-4                  9              8              -11.11%
 BenchmarkPutGradDelete1k                  9              8              -11.11%
-BenchmarkPutGradDelete1k-8                9              8              -11.11%
+BenchmarkPutGradDelete1k-4                9              8              -11.11%
 BenchmarkPutGradDelete1kInfohash          9              8              -11.11%
-BenchmarkPutGradDelete1kInfohash-8        9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash-4        9              8              -11.11%
 BenchmarkPutGradDelete1kInfohash1k        9              8              -11.11%
-BenchmarkPutGradDelete1kInfohash1k-8      9              8              -11.11%
+BenchmarkPutGradDelete1kInfohash1k-4      9              8              -11.11%
 BenchmarkGradNonexist                     2              1              -50.00%
-BenchmarkGradNonexist-8                   2              1              -50.00%
+BenchmarkGradNonexist-4                   2              1              -50.00%
 BenchmarkGradNonexist1k                   2              1              -50.00%
-BenchmarkGradNonexist1k-8                 2              1              -50.00%
+BenchmarkGradNonexist1k-4                 2              1              -50.00%
 BenchmarkGradNonexist1kInfohash           2              1              -50.00%
-BenchmarkGradNonexist1kInfohash-8         2              1              -50.00%
+BenchmarkGradNonexist1kInfohash-4         2              1              -50.00%
 BenchmarkGradNonexist1kInfohash1k         2              1              -50.00%
-BenchmarkGradNonexist1kInfohash1k-8       2              1              -50.00%
-BenchmarkAnnounceLeecher                  58             58             +0.00%
-BenchmarkAnnounceLeecher-8                58             58             +0.00%
-BenchmarkAnnounceLeecher1kInfohash        58             58             +0.00%
-BenchmarkAnnounceLeecher1kInfohash-8      58             58             +0.00%
-BenchmarkAnnounceSeeder                   58             58             +0.00%
-BenchmarkAnnounceSeeder-8                 58             58             +0.00%
-BenchmarkAnnounceSeeder1kInfohash         58             58             +0.00%
-BenchmarkAnnounceSeeder1kInfohash-8       58             58             +0.00%
+BenchmarkGradNonexist1kInfohash1k-4       2              1              -50.00%
+BenchmarkAnnounceLeecher                  57             58             +1.75%
+BenchmarkAnnounceLeecher-4                57             58             +1.75%
+BenchmarkAnnounceLeecher1kInfohash        57             58             +1.75%
+BenchmarkAnnounceLeecher1kInfohash-4      57             58             +1.75%
+BenchmarkAnnounceSeeder                   57             58             +1.75%
+BenchmarkAnnounceSeeder-4                 57             58             +1.75%
+BenchmarkAnnounceSeeder1kInfohash         57             58             +1.75%
+BenchmarkAnnounceSeeder1kInfohash-4       57             58             +1.75%
 
 benchmark                                 old bytes     new bytes     delta
 BenchmarkPut                              64            32            -50.00%
-BenchmarkPut-8                            64            32            -50.00%
+BenchmarkPut-4                            64            32            -50.00%
 BenchmarkPut1k                            64            32            -50.00%
-BenchmarkPut1k-8                          64            32            -50.00%
+BenchmarkPut1k-4                          64            32            -50.00%
 BenchmarkPut1kInfohash                    64            32            -50.00%
-BenchmarkPut1kInfohash-8                  64            32            -50.00%
+BenchmarkPut1kInfohash-4                  64            32            -50.00%
 BenchmarkPut1kInfohash1k                  64            32            -50.00%
-BenchmarkPut1kInfohash1k-8                64            32            -50.00%
+BenchmarkPut1kInfohash1k-4                64            32            -50.00%
 BenchmarkPutDelete                        400           256           -36.00%
-BenchmarkPutDelete-8                      400           256           -36.00%
+BenchmarkPutDelete-4                      400           256           -36.00%
 BenchmarkPutDelete1k                      400           256           -36.00%
-BenchmarkPutDelete1k-8                    400           256           -36.00%
+BenchmarkPutDelete1k-4                    400           256           -36.00%
 BenchmarkPutDelete1kInfohash              400           256           -36.00%
-BenchmarkPutDelete1kInfohash-8            400           256           -36.00%
+BenchmarkPutDelete1kInfohash-4            400           256           -36.00%
 BenchmarkPutDelete1kInfohash1k            400           256           -36.00%
-BenchmarkPutDelete1kInfohash1k-8          400           256           -36.00%
+BenchmarkPutDelete1kInfohash1k-4          400           256           -36.00%
 BenchmarkDeleteNonexist                   48            48            +0.00%
-BenchmarkDeleteNonexist-8                 48            48            +0.00%
+BenchmarkDeleteNonexist-4                 48            48            +0.00%
 BenchmarkDeleteNonexist1k                 48            48            +0.00%
-BenchmarkDeleteNonexist1k-8               48            48            +0.00%
+BenchmarkDeleteNonexist1k-4               48            48            +0.00%
 BenchmarkDeleteNonexist1kInfohash         48            48            +0.00%
-BenchmarkDeleteNonexist1kInfohash-8       48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash-4       48            48            +0.00%
 BenchmarkDeleteNonexist1kInfohash1k       48            48            +0.00%
-BenchmarkDeleteNonexist1kInfohash1k-8     48            48            +0.00%
+BenchmarkDeleteNonexist1kInfohash1k-4     48            48            +0.00%
 BenchmarkPutGradDelete                    672           288           -57.14%
-BenchmarkPutGradDelete-8                  672           288           -57.14%
+BenchmarkPutGradDelete-4                  672           288           -57.14%
 BenchmarkPutGradDelete1k                  672           288           -57.14%
-BenchmarkPutGradDelete1k-8                672           288           -57.14%
+BenchmarkPutGradDelete1k-4                672           288           -57.14%
 BenchmarkPutGradDelete1kInfohash          672           288           -57.14%
-BenchmarkPutGradDelete1kInfohash-8        672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash-4        672           288           -57.14%
 BenchmarkPutGradDelete1kInfohash1k        672           288           -57.14%
-BenchmarkPutGradDelete1kInfohash1k-8      672           288           -57.14%
+BenchmarkPutGradDelete1kInfohash1k-4      672           288           -57.14%
 BenchmarkGradNonexist                     64            32            -50.00%
-BenchmarkGradNonexist-8                   64            32            -50.00%
+BenchmarkGradNonexist-4                   64            32            -50.00%
 BenchmarkGradNonexist1k                   64            32            -50.00%
-BenchmarkGradNonexist1k-8                 64            32            -50.00%
+BenchmarkGradNonexist1k-4                 64            32            -50.00%
 BenchmarkGradNonexist1kInfohash           64            32            -50.00%
-BenchmarkGradNonexist1kInfohash-8         64            32            -50.00%
+BenchmarkGradNonexist1kInfohash-4         64            32            -50.00%
 BenchmarkGradNonexist1kInfohash1k         64            32            -50.00%
-BenchmarkGradNonexist1kInfohash1k-8       64            32            -50.00%
-BenchmarkAnnounceLeecher                  8296          9840          +18.61%
-BenchmarkAnnounceLeecher-8                8296          9840          +18.61%
-BenchmarkAnnounceLeecher1kInfohash        8296          9840          +18.61%
-BenchmarkAnnounceLeecher1kInfohash-8      8296          9840          +18.61%
-BenchmarkAnnounceSeeder                   8296          9840          +18.61%
-BenchmarkAnnounceSeeder-8                 8296          9840          +18.61%
-BenchmarkAnnounceSeeder1kInfohash         8296          9840          +18.61%
-BenchmarkAnnounceSeeder1kInfohash-8       8296          9840          +18.61%
+BenchmarkGradNonexist1kInfohash1k-4       64            32            -50.00%
+BenchmarkAnnounceLeecher                  8528          10080         +18.20%
+BenchmarkAnnounceLeecher-4                8528          10080         +18.20%
+BenchmarkAnnounceLeecher1kInfohash        8528          10080         +18.20%
+BenchmarkAnnounceLeecher1kInfohash-4      8528          10080         +18.20%
+BenchmarkAnnounceSeeder                   8528          10080         +18.20%
+BenchmarkAnnounceSeeder-4                 8528          10080         +18.20%
+BenchmarkAnnounceSeeder1kInfohash         8528          10080         +18.20%
+BenchmarkAnnounceSeeder1kInfohash-4       8528          10080         +18.20%
 ```
 
 Note that these are _just benchmarks_, not real-world metrics.
