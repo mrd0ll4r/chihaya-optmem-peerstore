@@ -1,21 +1,47 @@
 package optmem
 
 import (
-	"errors"
 	"time"
 
 	"github.com/chihaya/chihaya/pkg/log"
+	"github.com/chihaya/chihaya/storage"
+	"gopkg.in/yaml.v2"
 )
 
-var (
-	// ErrInvalidGCCutoff is returned for a config with an invalid
-	// gc_cutoff.
-	ErrInvalidGCCutoff = errors.New("invalid gc_cutoff")
+// Name is the name of this storage.
+const Name = "optmem"
 
-	// ErrInvalidPeerLifetime is returned for a config with an invalid
-	// peer_lifetime.
-	ErrInvalidPeerLifetime = errors.New("invalid peer_lifetime")
+// Default config constants.
+const (
+	defaultShardCountBits              = 10
+	defaultPrometheusReportingInterval = time.Second * 1
+	defaultGarbageCollectionInterval   = time.Minute * 3
+	defaultPeerLifetime                = time.Minute * 30
 )
+
+func init() {
+	// Register the storage driver.
+	storage.RegisterDriver(Name, driver{})
+}
+
+type driver struct{}
+
+func (d driver) NewPeerStore(icfg interface{}) (storage.PeerStore, error) {
+	// Marshal the config back into bytes.
+	bytes, err := yaml.Marshal(icfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// Unmarshal the bytes into the proper config type.
+	var cfg Config
+	err = yaml.Unmarshal(bytes, &cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	return New(cfg)
+}
 
 // Config holds the configuration for an optmen PeerStore.
 type Config struct {
@@ -36,38 +62,70 @@ type Config struct {
 	// are doing.
 	ShardCountBits uint `yaml:"shard_count_bits"`
 
-	// GCInterval is the interval at which garbage collection will run.
-	GCInterval time.Duration `yaml:"gc_interval"`
+	// GarbageCollectionInterval is the interval at which garbage collection will run.
+	GarbageCollectionInterval time.Duration `yaml:"gc_interval"`
 
 	// PeerLifetime is the maximum duration a peer is allowed to go without
 	// announcing before being marked for garbage collection.
 	PeerLifetime time.Duration `yaml:"peer_lifetime"`
 
+	// PrometheusReportingInterval is the interval at which metrics will be
+	// aggregated and reported to prometheus.
 	PrometheusReportingInterval time.Duration `yaml:"prometheus_reporting_interval"`
 }
 
 // LogFields implements log.LogFielder for a Config.
-func (c Config) LogFields() log.Fields {
+func (cfg Config) LogFields() log.Fields {
 	return log.Fields{
-		"shardCountBits":              c.ShardCountBits,
-		"gcInterval":                  c.GCInterval,
-		"peerLifetime":                c.PeerLifetime,
-		"prometheusReportingInterval": c.PrometheusReportingInterval,
+		"shardCountBits":              cfg.ShardCountBits,
+		"gcInterval":                  cfg.GarbageCollectionInterval,
+		"peerLifetime":                cfg.PeerLifetime,
+		"prometheusReportingInterval": cfg.PrometheusReportingInterval,
 	}
 }
 
-func validateConfig(cfg Config) (Config, error) {
-	if cfg.ShardCountBits < 1 {
-		cfg.ShardCountBits = 10
+// Validate sanity checks values set in a config and returns a new config with
+// default values replacing anything that is invalid.
+//
+// This function warns to the logger when a value is changed.
+func (cfg Config) Validate() Config {
+	validcfg := cfg
+
+	if cfg.ShardCountBits <= 0 {
+		validcfg.ShardCountBits = defaultShardCountBits
+		log.Warn("falling back to default configuration", log.Fields{
+			"name":     Name + ".ShardCountBits",
+			"provided": cfg.ShardCountBits,
+			"default":  validcfg.ShardCountBits,
+		})
 	}
 
-	if cfg.GCInterval == 0 {
-		return cfg, ErrInvalidPeerLifetime
+	if cfg.GarbageCollectionInterval <= 0 {
+		validcfg.GarbageCollectionInterval = defaultGarbageCollectionInterval
+		log.Warn("falling back to default configuration", log.Fields{
+			"name":     Name + ".GarbageCollectionInterval",
+			"provided": cfg.GarbageCollectionInterval,
+			"default":  validcfg.GarbageCollectionInterval,
+		})
 	}
 
-	if cfg.PeerLifetime == 0 {
-		return cfg, ErrInvalidGCCutoff
+	if cfg.PrometheusReportingInterval <= 0 {
+		validcfg.PrometheusReportingInterval = defaultPrometheusReportingInterval
+		log.Warn("falling back to default configuration", log.Fields{
+			"name":     Name + ".PrometheusReportingInterval",
+			"provided": cfg.PrometheusReportingInterval,
+			"default":  validcfg.PrometheusReportingInterval,
+		})
 	}
 
-	return cfg, nil
+	if cfg.PeerLifetime <= 0 {
+		validcfg.PeerLifetime = defaultPeerLifetime
+		log.Warn("falling back to default configuration", log.Fields{
+			"name":     Name + ".PeerLifetime",
+			"provided": cfg.PeerLifetime,
+			"default":  validcfg.PeerLifetime,
+		})
+	}
+
+	return validcfg
 }

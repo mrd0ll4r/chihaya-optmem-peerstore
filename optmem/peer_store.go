@@ -1,11 +1,11 @@
 package optmem
 
 import (
+	"encoding/binary"
 	"net"
 	"runtime"
+	"sync"
 	"time"
-
-	"encoding/binary"
 
 	"github.com/chihaya/chihaya/bittorrent"
 	"github.com/chihaya/chihaya/pkg/log"
@@ -20,11 +20,8 @@ var ErrInvalidIP = errors.New("invalid IP")
 var _ storage.PeerStore = &PeerStore{}
 
 // New creates a new PeerStore from the config.
-func New(cfg Config) (*PeerStore, error) {
-	cfg, err := validateConfig(cfg)
-	if err != nil {
-		return nil, errors.Wrap(err, "invalid config")
-	}
+func New(provided Config) (*PeerStore, error) {
+	cfg := provided.Validate()
 
 	ps := &PeerStore{
 		shards: newShardContainer(cfg.ShardCountBits),
@@ -32,12 +29,15 @@ func New(cfg Config) (*PeerStore, error) {
 		cfg:    cfg,
 	}
 
+	// Start a goroutine for garbage collection.
+	ps.wg.Add(1)
 	go func() {
+		defer ps.wg.Done()
 		for {
 			select {
 			case <-ps.closed:
 				return
-			case <-time.After(cfg.GCInterval):
+			case <-time.After(cfg.GarbageCollectionInterval):
 				cutoffTime := time.Now().Add(cfg.PeerLifetime * -1)
 				log.Debug("optmem: collecting garbage", log.Fields{"cutoffTime": cutoffTime})
 				ps.collectGarbage(cutoffTime)
@@ -46,7 +46,23 @@ func New(cfg Config) (*PeerStore, error) {
 		}
 	}()
 
-	// TODO prometheus reporting
+	// Start a goroutine for reporting statistics to Prometheus.
+	ps.wg.Add(1)
+	go func() {
+		defer ps.wg.Done()
+		t := time.NewTicker(cfg.PrometheusReportingInterval)
+		for {
+			select {
+			case <-ps.closed:
+				t.Stop()
+				return
+			case <-t.C:
+				before := time.Now()
+				ps.populateProm()
+				log.Debug("storage: populateProm() finished", log.Fields{"timeTaken": time.Since(before)})
+			}
+		}
+	}()
 
 	return ps, nil
 }
@@ -56,6 +72,20 @@ type PeerStore struct {
 	shards *shardContainer
 	closed chan struct{}
 	cfg    Config
+	wg     sync.WaitGroup
+}
+
+// recordGCDuration records the duration of a GC sweep.
+func recordGCDuration(duration time.Duration) {
+	storage.PromGCDurationMilliseconds.Observe(float64(duration.Nanoseconds()) / float64(time.Millisecond))
+}
+
+// populateProm aggregates metrics over all shards and then posts them to
+// prometheus.
+func (s *PeerStore) populateProm() {
+	storage.PromInfohashesCount.Set(float64(s.NumSwarms()))
+	storage.PromSeedersCount.Set(float64(s.NumTotalSeeders()))
+	storage.PromLeechersCount.Set(float64(s.NumTotalLeechers()))
 }
 
 // LogFields implements log.LogFielder for a PeerStore.
@@ -64,6 +94,7 @@ func (s *PeerStore) LogFields() log.Fields {
 }
 
 func (s *PeerStore) collectGarbage(cutoff time.Time) {
+	start := time.Now()
 	internalCutoff := uint16(cutoff.Unix())
 	maxDiff := uint16(time.Now().Unix() - cutoff.Unix())
 	log.Debug("optmem: running GC", log.Fields{"internalCutoff": internalCutoff, "maxDiff": maxDiff, "numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
@@ -105,6 +136,7 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 		runtime.Gosched()
 	}
 
+	recordGCDuration(time.Since(start))
 	log.Debug("optmem: GC done", log.Fields{"numInfohashes": s.NumSwarms(), "numPeers": s.NumTotalPeers()})
 }
 
