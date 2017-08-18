@@ -17,7 +17,7 @@ It uses very little memory, is (subjectively) fast and handles both IPv4 and IPv
 You should first `go get` the relevant package:
 
 ```
-go get github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
+go get -u github.com/mrd0ll4r/chihaya-optmem-peerstore/optmem
 ```
 
 Next you need to import it in your chihaya binary, like so:
