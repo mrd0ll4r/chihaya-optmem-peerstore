@@ -398,13 +398,12 @@ func (s *PeerStore) ScrapeSwarm(infoHash bittorrent.InfoHash, af bittorrent.Addr
 	default:
 	}
 
+	scrape.InfoHash = infoHash
 	ih := infohash(infoHash)
-
 	shard := s.shards.rLockShardByHash(ih)
 
-	var pl swarm
-	var ok bool
-	if pl, ok = shard.swarms[ih]; !ok {
+	pl, ok := shard.swarms[ih]
+	if !ok {
 		s.shards.rUnlockShardByHash(ih)
 		return
 	}
