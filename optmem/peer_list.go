@@ -151,7 +151,7 @@ func (pl *peerList) removePeer(p *peer) (found bool) {
 	match := sort.Search(len(bucket), func(i int) bool {
 		return bytes.Compare(p[:peerCompareSize], bucket[i][:peerCompareSize]) >= 0
 	})
-	if match >= len(bucket) || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
+	if match >= len(bucket) || bucket[match].peerFlag()&p.peerFlag() == 0 || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
 		return false
 	}
 	found = true
