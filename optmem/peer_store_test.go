@@ -224,6 +224,13 @@ func createNew() s.PeerStore {
 	return ps
 }
 
+func TestPeerStore(t *testing.T) {
+	tmp := s.PeerEqualityFunc
+	s.PeerEqualityFunc = func(p1, p2 bittorrent.Peer) bool { return p1.EqualEndpoint(p2) }
+	s.TestPeerStore(t, createNew())
+	s.PeerEqualityFunc = tmp
+}
+
 func BenchmarkPut(b *testing.B)                        { s.Put(b, createNew()) }
 func BenchmarkPut1k(b *testing.B)                      { s.Put1k(b, createNew()) }
 func BenchmarkPut1kInfohash(b *testing.B)              { s.Put1kInfohash(b, createNew()) }
