@@ -16,12 +16,29 @@ type peerList struct {
 	numSeeders   int
 	numPeers     int
 	numDownloads uint64
-	peerBuckets  [][]peer // sorted by endpoint
+	peerBuckets  []bucket // sorted by endpoint
+}
+
+type bucket []peer
+
+// Len implements sort.Interface for a bucket.
+func (b bucket) Len() int {
+	return len(b)
+}
+
+// Less implements sort.Interface for a bucket.
+func (b bucket) Less(i, j int) bool {
+	return bytes.Compare(b[i][:peerCompareSize], b[j][:peerCompareSize]) < 0
+}
+
+// Swap implements sort.Interface for a bucket.
+func (b bucket) Swap(i, j int) {
+	b[i], b[j] = b[j], b[i]
 }
 
 func newPeerList() *peerList {
 	return &peerList{
-		peerBuckets: make([][]peer, 1),
+		peerBuckets: make([]bucket, 1),
 	}
 }
 
@@ -57,41 +74,73 @@ func (pl *peerList) collectGarbage(cutoffTime, maxDiff uint16) (gc bool) {
 	return
 }
 
-// rebalanceBuckets checks if a certain number of peers is reached and performs
-// rebalancing if it is.
-// Rebalancing will create new buckets and redistribute all peers to them.
-// Rebalancing aims to have less than 512 peers per bucket.
-// Returns whether rebalancing was performed.
-func (pl *peerList) rebalanceBuckets() bool {
-	targetBuckets := 2
-	t := 0
+// computeTargetBuckets computes the number of buckets to be used for a number
+// of peers.
+// It returns targetBuckets and defensiveTargetBuckets, to be used when reducing
+// the number of peers.
+// computeTargetBuckets aims to have <=512 peers per bucket, assuming an even
+// distribution.
+// A buffer of numPeers/10 is used to avoid churn when the number of peers is
+// hovering around one of 512^k, for example 512.
+// See rebalanceBuckets for a usage example.
+func computeTargetBuckets(numPeers int) (int, int) {
+	targetBuckets := 1
+	defensiveTargetBuckets := 1
+	bufferWidth := numPeers/10 - 1
 
-	if pl.numPeers > 0 {
-		t = (pl.numPeers - 1) >> 9
-	}
-	for ; t != 0; t = t >> 1 {
-		targetBuckets = targetBuckets * 2
-	}
-
-	if len(pl.peerBuckets) == targetBuckets {
-		return false
-	}
-
-	before := time.Now()
-
-	oldBuckets := pl.peerBuckets
-	pl.peerBuckets = make([][]peer, targetBuckets)
-	pl.numPeers = 0
-	pl.numSeeders = 0
-
-	for _, bucket := range oldBuckets {
-		for _, peer := range bucket {
-			pl.putPeer(&peer)
+	if numPeers > 0 {
+		for t := (numPeers - 1) >> 9; t != 0; t = t >> 1 {
+			targetBuckets = targetBuckets * 2
+		}
+		for t := (numPeers + bufferWidth) >> 9; t != 0; t = t >> 1 {
+			defensiveTargetBuckets = defensiveTargetBuckets * 2
 		}
 	}
 
-	if targetBuckets >= 1024 {
-		log.Info("optmem: had to do a huge bucket rebalance", log.Fields{"buckets": targetBuckets, "numPeers": pl.numPeers, "duration": time.Since(before)})
+	return targetBuckets, defensiveTargetBuckets
+}
+
+// rebalanceBuckets checks if a certain number of peers is reached and performs
+// rebalancing if it is.
+// Rebalancing will create new buckets and redistribute all peers to them. It
+// aims to have less than 512 peers per bucket.
+// When more buckets are necessary to fulfill <=512 peers per bucket, they will
+// be created immediately and peers will be redistributed.
+// On the other hand, if less buckets could sustain the <=512 target, there is
+// a buffer zone of pl.numPeers/10 peers, to avoid sizing the bucket list up and
+// down constantly.
+// Returns whether rebalancing was performed.
+func (pl *peerList) rebalanceBuckets() bool {
+	targetBuckets, defensiveTargetBuckets := computeTargetBuckets(pl.numPeers)
+
+	if len(pl.peerBuckets) == targetBuckets {
+		return false
+	} else if len(pl.peerBuckets) > targetBuckets {
+		if targetBuckets != defensiveTargetBuckets {
+			// Buffer zone: don't immediately reduce the number of buckets to reduce churn
+			return false
+		}
+	}
+
+	before := time.Now()
+	oldBuckets := pl.peerBuckets
+	pl.peerBuckets = make([]bucket, targetBuckets)
+
+	// Add all peers to their buckets, without explicitly sorting them.
+	// This should avoid a lot of memmoves.
+	for _, bucket := range oldBuckets {
+		for _, peer := range bucket {
+			bucketRef := &pl.peerBuckets[pl.bucketIndex(&peer)]
+			*bucketRef = append(*bucketRef, peer)
+		}
+	}
+	// (Quick)Sort them. Just swapping pointers, should be fast (I hope).
+	for _, bucket := range pl.peerBuckets {
+		sort.Sort(bucket)
+	}
+
+	if targetBuckets >= 256 {
+		log.Info("optmem: had to do a huge bucket rebalance", log.Fields{"buckets": targetBuckets, "numPeers": pl.numPeers, "timeTaken": time.Since(before)})
 	}
 	return true
 }
@@ -100,9 +149,9 @@ func (pl *peerList) removePeer(p *peer) (found bool) {
 	bucketRef := &pl.peerBuckets[pl.bucketIndex(p)]
 	bucket := *bucketRef
 	match := sort.Search(len(bucket), func(i int) bool {
-		return bytes.Compare(p.data[:peerCompareSize], bucket[i].data[:peerCompareSize]) >= 0
+		return bytes.Compare(p[:peerCompareSize], bucket[i][:peerCompareSize]) >= 0
 	})
-	if match >= len(bucket) || !bytes.Equal(p.data[:peerCompareSize], bucket[match].data[:peerCompareSize]) {
+	if match >= len(bucket) || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
 		return false
 	}
 	found = true
@@ -122,9 +171,9 @@ func (pl *peerList) putPeer(p *peer) {
 	bucket := *bucketRef
 
 	match := sort.Search(len(bucket), func(i int) bool {
-		return bytes.Compare(p.data[:peerCompareSize], bucket[i].data[:peerCompareSize]) >= 0
+		return bytes.Compare(p[:peerCompareSize], bucket[i][:peerCompareSize]) >= 0
 	})
-	if match >= len(bucket) || !bytes.Equal(p.data[:peerCompareSize], bucket[match].data[:peerCompareSize]) {
+	if match >= len(bucket) || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
 		// create new and insert
 		bucket = append(bucket, peer{})
 		copy(bucket[match+1:], bucket[match:])
@@ -288,14 +337,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 	}
 	// we have exactly as many peers as they want
 	if numWant == pl.numPeers {
-		tmp := pl.getAllPeers()
-		peers = make([]peer, 0, len(tmp))
-		for _, p := range tmp {
-			// filter out the announcing peer
-			if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {
-				peers = append(peers, p)
-			}
-		}
+		peers = pl.getAllPeers()
 		return
 	}
 
@@ -303,12 +345,7 @@ func (pl *peerList) getAnnouncePeers(numWant int, seeder bool, announcingPeer *p
 	peers = make([]peer, 0, numWant)
 	peers = append(peers, pl.getAllSeeders()...)
 	leechers := pl.getRandomLeechers(numWant-len(peers), s0, s1)
-	for _, p := range leechers {
-		// filter out the announcing peer
-		if !bytes.Equal(p.data[:peerCompareSize], announcingPeer.data[:peerCompareSize]) {
-			peers = append(peers, p)
-		}
-	}
+	peers = append(peers, leechers...)
 	return
 }
 
@@ -317,7 +354,7 @@ func (pl *peerList) bucketIndex(peer *peer) int {
 	var i uint = peerCompareSize
 
 	for j := 0; i > 0; i, j = i-1, j+1 {
-		hash += (hash << 5) + uint(peer.data[j])
+		hash += (hash << 5) + uint(peer[j])
 	}
 
 	return int(hash % uint(len(pl.peerBuckets)))

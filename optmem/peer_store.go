@@ -367,12 +367,13 @@ func (s *PeerStore) announceSingleStack(ih infohash, seeder bool, numWant int, p
 	}
 	s.shards.rUnlockShardByHash(ih)
 
-	for _, p := range ps {
+	peers = make([]bittorrent.Peer, len(ps))
+	for i, p := range ps {
 		if af == bittorrent.IPv4 {
-			peers = append(peers, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
+			peers[i] = bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip4()), AddressFamily: bittorrent.IPv4}, Port: p.port()}
 			continue
 		}
-		peers = append(peers, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()), AddressFamily: bittorrent.IPv6}, Port: p.port()})
+		peers[i] = bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()), AddressFamily: bittorrent.IPv6}, Port: p.port()}
 	}
 
 	return
@@ -497,7 +498,7 @@ func (s *PeerStore) GetSeeders(infoHash bittorrent.InfoHash) (peers4, peers6 []b
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip4()), AddressFamily: bittorrent.IPv4}, Port: p.port()})
 	}
 
 	for _, p := range ps6 {
@@ -534,7 +535,7 @@ func (s *PeerStore) GetLeechers(infoHash bittorrent.InfoHash) (peers4, peers6 []
 	s.shards.rUnlockShardByHash(ih)
 
 	for _, p := range ps4 {
-		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip()).To4(), AddressFamily: bittorrent.IPv4}, Port: p.port()})
+		peers4 = append(peers4, bittorrent.Peer{IP: bittorrent.IP{IP: net.IP(p.ip4()), AddressFamily: bittorrent.IPv4}, Port: p.port()})
 	}
 
 	for _, p := range ps6 {
