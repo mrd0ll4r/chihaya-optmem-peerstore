@@ -31,6 +31,12 @@ func (p *peer) ip() []byte {
 	return toReturn
 }
 
+func (p *peer) ip4() []byte {
+	toReturn := make([]byte, 4)
+	copy(toReturn, p[12:16])
+	return toReturn
+}
+
 func (p *peer) setPort(port uint16) {
 	binary.BigEndian.PutUint16(p[ipLen:ipLen+portLen], port)
 }
