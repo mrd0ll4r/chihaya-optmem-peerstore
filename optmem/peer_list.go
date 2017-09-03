@@ -2,7 +2,9 @@ package optmem
 
 import (
 	"bytes"
+	"fmt"
 	"math"
+	"net"
 	"sort"
 	"time"
 
@@ -49,25 +51,28 @@ func (pl *peerList) collectGarbage(cutoffTime, maxDiff uint16) (gc bool) {
 	for j := 0; j < len(pl.peerBuckets); j++ {
 		for i := 0; i < len(pl.peerBuckets[j]); i++ {
 			peer := pl.peerBuckets[j][i]
+			var remove bool
 			if peer.peerTime() == cutoffTime {
-				gc = true
-				pl.removePeer(&peer)
-				i--
+				remove = true
 			} else if peer.peerTime() < cutoffTime {
 				// annoying wrapping case
 				diff := uint16(math.MaxUint16) - (cutoffTime - peer.peerTime())
 				if diff > maxDiff {
-					gc = true
-					pl.removePeer(&peer)
-					i--
+					remove = true
 				}
 			} else {
 				diff := peer.peerTime() - cutoffTime
 				if diff > maxDiff {
-					gc = true
-					pl.removePeer(&peer)
-					i--
+					remove = true
 				}
+			}
+			if remove {
+				gc = true
+				found := pl.removePeer(&peer)
+				if !found {
+					panic(fmt.Sprintf("peer not found during GC, peer: %s %d", net.IP(peer.ip()), peer.port()))
+				}
+				i--
 			}
 		}
 	}
@@ -139,19 +144,24 @@ func (pl *peerList) rebalanceBuckets() bool {
 		sort.Sort(bucket)
 	}
 
+	log.Debug("optmem: bucket rebalance finished", log.Fields{"buckets": targetBuckets, "numPeers": pl.numPeers, "timeTaken": time.Since(before)})
 	if targetBuckets >= 256 {
 		log.Info("optmem: had to do a huge bucket rebalance", log.Fields{"buckets": targetBuckets, "numPeers": pl.numPeers, "timeTaken": time.Since(before)})
 	}
 	return true
 }
 
+func binarySearchFunc(p *peer, b bucket) func(int) bool {
+	return func(i int) bool {
+		return bytes.Compare(p[:peerCompareSize], b[i][:peerCompareSize]) <= 0
+	}
+}
+
 func (pl *peerList) removePeer(p *peer) (found bool) {
 	bucketRef := &pl.peerBuckets[pl.bucketIndex(p)]
 	bucket := *bucketRef
-	match := sort.Search(len(bucket), func(i int) bool {
-		return bytes.Compare(p[:peerCompareSize], bucket[i][:peerCompareSize]) >= 0
-	})
-	if match >= len(bucket) || bucket[match].peerFlag()&p.peerFlag() == 0 || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
+	match := sort.Search(len(bucket), binarySearchFunc(p, bucket))
+	if match >= len(bucket) || bucket[match].peerFlag() != p.peerFlag() || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
 		return false
 	}
 	found = true
@@ -169,10 +179,7 @@ func (pl *peerList) removePeer(p *peer) (found bool) {
 func (pl *peerList) putPeer(p *peer) {
 	bucketRef := &pl.peerBuckets[pl.bucketIndex(p)]
 	bucket := *bucketRef
-
-	match := sort.Search(len(bucket), func(i int) bool {
-		return bytes.Compare(p[:peerCompareSize], bucket[i][:peerCompareSize]) >= 0
-	})
+	match := sort.Search(len(bucket), binarySearchFunc(p, bucket))
 	if match >= len(bucket) || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
 		// create new and insert
 		bucket = append(bucket, peer{})

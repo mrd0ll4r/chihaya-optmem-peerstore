@@ -58,6 +58,7 @@ func New(provided Config) (*PeerStore, error) {
 				return
 			case <-t.C:
 				before := time.Now()
+				log.Debug("optmem: populating prometheus...")
 				ps.populateProm()
 				log.Debug("storage: populateProm() finished", log.Fields{"timeTaken": time.Since(before)})
 			}
@@ -103,7 +104,9 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		deltaTorrents := 0
+		log.Debug("garbage-collecting shard", log.Fields{"index": i})
 		shard := s.shards.lockShard(i)
+		log.Debug("got GC lock", log.Fields{"index": i})
 
 		for ih, s := range shard.swarms {
 			if s.peers4 != nil {
@@ -135,6 +138,7 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 		}
 
 		s.shards.unlockShard(i, deltaTorrents)
+		log.Debug("done garbage-collecting shard", log.Fields{"index": i})
 		runtime.Gosched()
 	}
 
