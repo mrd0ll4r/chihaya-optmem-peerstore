@@ -11,7 +11,7 @@ import (
 )
 
 var (
-	testConfig = Config{ShardCountBits: 10, GarbageCollectionInterval: time.Duration(10000000000), PeerLifetime: time.Duration(10000000000), PrometheusReportingInterval: time.Duration(10000000000)}
+	testConfig = Config{ShardCountBits: 10, GarbageCollectionInterval: 10 * time.Minute, PeerLifetime: 10 * time.Minute, PrometheusReportingInterval: 10 * time.Minute}
 )
 
 var (
