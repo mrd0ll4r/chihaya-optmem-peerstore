@@ -68,7 +68,7 @@ func (pl *peerList) collectGarbage(cutoffTime, maxDiff uint16) (gc bool) {
 			}
 			if remove {
 				gc = true
-				found := pl.removePeer(&peer)
+				found, _ := pl.removePeer(&peer)
 				if !found {
 					panic(fmt.Sprintf("peer not found during GC, peer: %s %d", net.IP(peer.ip()), peer.port()))
 				}
@@ -157,17 +157,18 @@ func binarySearchFunc(p *peer, b bucket) func(int) bool {
 	}
 }
 
-func (pl *peerList) removePeer(p *peer) (found bool) {
+func (pl *peerList) removePeer(p *peer) (found bool, wasSeeder bool) {
 	bucketRef := &pl.peerBuckets[pl.bucketIndex(p)]
 	bucket := *bucketRef
 	match := sort.Search(len(bucket), binarySearchFunc(p, bucket))
 	if match >= len(bucket) || bucket[match].peerFlag() != p.peerFlag() || !bytes.Equal(p[:peerCompareSize], bucket[match][:peerCompareSize]) {
-		return false
+		return false, false
 	}
 	found = true
 	pl.numPeers--
 
 	if bucket[match].isSeeder() {
+		wasSeeder = true
 		pl.numSeeders--
 	}
 	bucket = append(bucket[:match], bucket[match+1:]...)
@@ -176,7 +177,7 @@ func (pl *peerList) removePeer(p *peer) (found bool) {
 	return
 }
 
-func (pl *peerList) putPeer(p *peer) {
+func (pl *peerList) putPeer(p *peer) (deltaPeers uint64, deltaSeeders int64) {
 	bucketRef := &pl.peerBuckets[pl.bucketIndex(p)]
 	bucket := *bucketRef
 	match := sort.Search(len(bucket), binarySearchFunc(p, bucket))
@@ -187,8 +188,10 @@ func (pl *peerList) putPeer(p *peer) {
 		bucket[match] = *p
 		*bucketRef = bucket
 		pl.numPeers++
+		deltaPeers = 1
 		if p.isSeeder() {
 			pl.numSeeders++
+			deltaSeeders = 1
 		}
 		return
 	}
@@ -197,9 +200,11 @@ func (pl *peerList) putPeer(p *peer) {
 	// update seeder/leecher count!
 	if bucket[match].isLeecher() && p.isSeeder() {
 		pl.numSeeders++
+		deltaSeeders = 1
 	} else if bucket[match].isSeeder() && p.isLeecher() {
 		// strange case but whatever
 		pl.numSeeders--
+		deltaSeeders = -1
 	}
 	bucket[match] = *p
 

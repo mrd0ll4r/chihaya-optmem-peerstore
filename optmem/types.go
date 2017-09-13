@@ -91,5 +91,7 @@ type swarm struct {
 }
 
 type shard struct {
-	swarms map[infohash]swarm
+	swarms     map[infohash]swarm
+	numPeers   uint64
+	numSeeders uint64
 }

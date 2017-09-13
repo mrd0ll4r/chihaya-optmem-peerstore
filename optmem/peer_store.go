@@ -104,30 +104,39 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		deltaTorrents := 0
+		// We must recount the number of seeders/leechers during GC, that's probably easier than having
+		// (*peerList).collectGarbage() return the number.
+		var numPeers, numSeeders uint64
 		log.Debug("garbage-collecting shard", log.Fields{"index": i})
 		shard := s.shards.lockShard(i)
-		log.Debug("got GC lock", log.Fields{"index": i})
+		log.Debug("got GC lock", log.Fields{"index": i, "infohashesInShard": len(shard.swarms)})
 
 		for ih, s := range shard.swarms {
 			if s.peers4 != nil {
 				gc := s.peers4.collectGarbage(internalCutoff, maxDiff)
-				if gc {
-					s.peers4.rebalanceBuckets()
-				}
 				if s.peers4.numPeers == 0 {
 					s.peers4 = nil
 					shard.swarms[ih] = s
+				} else {
+					if gc {
+						s.peers4.rebalanceBuckets()
+					}
+					numPeers += uint64(s.peers4.numPeers)
+					numSeeders += uint64(s.peers4.numSeeders)
 				}
 			}
 
 			if s.peers6 != nil {
 				gc := s.peers6.collectGarbage(internalCutoff, maxDiff)
-				if gc {
-					s.peers6.rebalanceBuckets()
-				}
 				if s.peers6.numPeers == 0 {
 					s.peers6 = nil
 					shard.swarms[ih] = s
+				} else {
+					if gc {
+						s.peers6.rebalanceBuckets()
+					}
+					numPeers += uint64(s.peers6.numPeers)
+					numSeeders += uint64(s.peers6.numSeeders)
 				}
 			}
 
@@ -136,6 +145,9 @@ func (s *PeerStore) collectGarbage(cutoff time.Time) {
 				deltaTorrents--
 			}
 		}
+
+		shard.numPeers = numPeers
+		shard.numSeeders = numSeeders
 
 		s.shards.unlockShard(i, deltaTorrents)
 		log.Debug("done garbage-collecting shard", log.Fields{"index": i})
@@ -250,16 +262,24 @@ func (s *PeerStore) putPeer(ih infohash, peer *peer, af bittorrent.AddressFamily
 			shard.swarms[ih] = pl
 		}
 
-		pl.peers4.putPeer(peer)
-		pl.peers4.rebalanceBuckets()
+		deltaPeers, deltaSeeders := pl.peers4.putPeer(peer)
+		if deltaPeers != 0 {
+			pl.peers4.rebalanceBuckets()
+			shard.numPeers += deltaPeers
+		}
+		shard.numSeeders = uint64(int64(shard.numSeeders) + deltaSeeders)
 	} else {
 		if pl.peers6 == nil {
 			pl.peers6 = newPeerList()
 			shard.swarms[ih] = pl
 		}
 
-		pl.peers6.putPeer(peer)
-		pl.peers6.rebalanceBuckets()
+		deltaPeers, deltaSeeders := pl.peers6.putPeer(peer)
+		if deltaPeers != 0 {
+			pl.peers6.rebalanceBuckets()
+			shard.numPeers += deltaPeers
+		}
+		shard.numSeeders = uint64(int64(shard.numSeeders) + deltaSeeders)
 	}
 
 	if swarmCreated {
@@ -290,9 +310,13 @@ func (s *PeerStore) deletePeer(ih infohash, peer *peer, af bittorrent.AddressFam
 			return false, storage.ErrResourceDoesNotExist
 		}
 
-		found := pl.peers4.removePeer(peer)
+		found, seeder := pl.peers4.removePeer(peer)
 		if !found {
 			return false, storage.ErrResourceDoesNotExist
+		}
+		shard.numPeers--
+		if seeder {
+			shard.numSeeders--
 		}
 
 		if pl.peers4.numPeers == 0 {
@@ -306,9 +330,13 @@ func (s *PeerStore) deletePeer(ih infohash, peer *peer, af bittorrent.AddressFam
 			return false, storage.ErrResourceDoesNotExist
 		}
 
-		found := pl.peers6.removePeer(peer)
+		found, seeder := pl.peers6.removePeer(peer)
 		if !found {
 			return false, storage.ErrResourceDoesNotExist
+		}
+		shard.numPeers--
+		if seeder {
+			shard.numSeeders--
 		}
 
 		if pl.peers6.numPeers == 0 {
@@ -592,16 +620,8 @@ func (s *PeerStore) NumTotalPeers() (seeders, leechers uint64) {
 
 	for i := 0; i < len(s.shards.shards); i++ {
 		shard := s.shards.rLockShard(i)
-		for _, s := range shard.swarms {
-			if s.peers4 != nil {
-				leechers += uint64(s.peers4.numPeers - s.peers4.numSeeders)
-				seeders += uint64(s.peers4.numSeeders)
-			}
-			if s.peers6 != nil {
-				leechers += uint64(s.peers6.numPeers - s.peers6.numSeeders)
-				seeders += uint64(s.peers6.numSeeders)
-			}
-		}
+		seeders += shard.numSeeders
+		leechers += shard.numPeers - shard.numSeeders
 		s.shards.rUnlockShard(i)
 	}
 
