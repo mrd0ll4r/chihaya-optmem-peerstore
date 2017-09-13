@@ -59,7 +59,7 @@ func TestRemovePeer(t *testing.T) {
 		p := new(peer)
 		p.setIP(net.IP{245, 132, 24, byte(i)}.To16())
 		p.setPort(3124 + uint16(i))
-		found := pl.removePeer(p)
+		found, _ := pl.removePeer(p)
 		require.True(t, found)
 	}
 
