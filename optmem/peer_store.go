@@ -10,6 +10,7 @@ import (
 	"github.com/chihaya/chihaya/bittorrent"
 	"github.com/chihaya/chihaya/pkg/log"
 	"github.com/chihaya/chihaya/pkg/stop"
+	"github.com/chihaya/chihaya/pkg/timecache"
 	"github.com/chihaya/chihaya/storage"
 	"github.com/pkg/errors"
 )
@@ -180,7 +181,7 @@ func (s *PeerStore) PutSeeder(infoHash bittorrent.InfoHash, p bittorrent.Peer) e
 	default:
 	}
 
-	peer := makePeer(p, peerFlagSeeder, uint16(time.Now().Unix()))
+	peer := makePeer(p, peerFlagSeeder, uint16(timecache.NowUnix()))
 	ih := infohash(infoHash)
 
 	s.putPeer(ih, peer, p.IP.AddressFamily)
@@ -212,7 +213,7 @@ func (s *PeerStore) PutLeecher(infoHash bittorrent.InfoHash, p bittorrent.Peer) 
 	default:
 	}
 
-	peer := makePeer(p, peerFlagLeecher, uint16(time.Now().Unix()))
+	peer := makePeer(p, peerFlagLeecher, uint16(timecache.NowUnix()))
 	ih := infohash(infoHash)
 
 	s.putPeer(ih, peer, p.IP.AddressFamily)
