@@ -579,13 +579,13 @@ func (s *PeerStore) GetLeechers(infoHash bittorrent.InfoHash) (peers4, peers6 []
 }
 
 // Stop implements the Stop method of a storage.PeerStore.
-func (s *PeerStore) Stop() <-chan error {
+func (s *PeerStore) Stop() stop.Result {
 	select {
 	case <-s.closed:
 		return stop.AlreadyStopped
 	default:
 	}
-	toReturn := make(chan error)
+	toReturn := make(chan []error)
 	go func() {
 		close(s.closed)
 		s.wg.Wait()

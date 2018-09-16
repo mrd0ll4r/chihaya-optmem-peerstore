@@ -55,8 +55,8 @@ func TestPutNumGetSeeder(t *testing.T) {
 	}
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func TestPutNumGetLeecher(t *testing.T) {
@@ -88,8 +88,8 @@ func TestPutNumGetLeecher(t *testing.T) {
 	}
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func TestDeleteSeeder(t *testing.T) {
@@ -129,8 +129,8 @@ func TestDeleteSeeder(t *testing.T) {
 	}
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func TestDeleteLastSeeder(t *testing.T) {
@@ -150,8 +150,8 @@ func TestDeleteLastSeeder(t *testing.T) {
 	require.Equal(t, s.ErrResourceDoesNotExist, err)
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func TestDeleteLeecher(t *testing.T) {
@@ -191,8 +191,8 @@ func TestDeleteLeecher(t *testing.T) {
 	}
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func TestDeleteLastLeecher(t *testing.T) {
@@ -212,8 +212,8 @@ func TestDeleteLastLeecher(t *testing.T) {
 	require.Equal(t, s.ErrResourceDoesNotExist, err)
 
 	e := ps.Stop()
-	err = <-e
-	require.Nil(t, err)
+	errs := <-e
+	require.Nil(t, errs)
 }
 
 func createNew() s.PeerStore {
